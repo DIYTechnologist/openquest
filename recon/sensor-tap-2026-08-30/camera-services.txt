@@ -1,0 +1,11 @@
+  890 cameramuxmodeservice
+---HAL---
+DC,FM Y android.frameworks.sensorservice@1.0::ISensorManager/default              N/A        N/A    
+DM,FC Y android.hardware.sensors@2.0::ISensors/default                            N/A        N/A    
+DM,FC N vendor.oculus.hardware.sensors@1.0::ICameraProvider/default               N/A        N/A    
+DM,FC N vendor.oculus.hardware.sensors@1.0::IControllerProvider/default           N/A        N/A    
+DM,FC N vendor.oculus.hardware.sensors@1.0::IIad/default                          N/A        N/A    
+DM,FC N vendor.oculus.hardware.sensors@1.0::IImu/default                          N/A        N/A    
+DM,FC N vendor.oculus.hardware.sensors@1.0::IMag/default                          N/A        N/A    
+DM,FC N vendor.oculus.hardware.sensors_java@1.0::IPowerstate/default              N/A        N/A    
+Can't find service: media.camera

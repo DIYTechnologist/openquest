@@ -1,0 +1,6 @@
+0x00000001) Syncboss Double Tap Virtual Sensor | Oculus VR       | ver: 1 | type: oculus.sensor.doubletap(65536) | perm: n/a | flags: 0x00000002
+	on-change | maxDelay=0us | minDelay=0us | no batching | non-wakeUp | 
+9-axis fusion disabled (0 clients), gyro-rate= 200.00Hz, q=< 0, 0, 0, 0 > (0), b=< 0, 0, 0 >
+game fusion(no mag) disabled (0 clients), gyro-rate= 200.00Hz, q=< 0, 0, 0, 0 > (0), b=< 0, 0, 0 >
+geomag fusion (no gyro) disabled (0 clients), gyro-rate= 200.00Hz, q=< 0, 0, 0, 0 > (0), b=< 0, 0, 0 >
+Syncboss Double Tap Virtual Sensor (handle=0x00000001, connections=1)

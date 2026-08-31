@@ -1,0 +1,23 @@
+crw-rw-r-- 1 system system 10,  57 1970-06-10 03:27 /dev/syncboss0
+crw-rw-r-- 1 system system 10,  57 1970-06-10 03:27 /dev/syncboss0
+crw-rw-r-- 1 system system 10,  55 1970-06-10 03:27 /dev/syncboss_control0
+crw-rw-r-- 1 system system 10,  55 1970-06-10 03:27 /dev/syncboss_control0
+crw-rw-r-- 1 system system 10,  54 1970-06-10 03:27 /dev/syncboss_powerstate0
+crw-rw-r-- 1 system system 10,  54 1970-06-10 03:27 /dev/syncboss_powerstate0
+crw-rw-r-- 1 system system 10,  56 1970-06-10 03:27 /dev/syncboss_stream0
+crw-rw-r-- 1 system system 10,  56 1970-06-10 03:27 /dev/syncboss_stream0
+---SYS---
+/sys/bus/spi/drivers/oculus_syncboss
+/sys/devices/virtual/misc/syncboss_stream0
+/sys/devices/virtual/misc/syncboss_powerstate0
+/sys/devices/virtual/misc/syncboss0
+/sys/devices/virtual/misc/syncboss_control0
+/sys/class/misc/syncboss_stream0
+/sys/class/misc/syncboss_powerstate0
+/sys/class/misc/syncboss0
+/sys/class/misc/syncboss_control0
+---DRIVER---
+spi12.0
+spi5.0
+spi:syncboss
+spi:cm710x-spi

@@ -1,0 +1,19 @@
+== /sys/bus/iio/devices/iio:device0
+800f000.qcom,spmi:qcom,pmi8998@2:rradc@4500
+ channels:
+in_temp_batt_therm_raw
+in_temp_chg_temp_hot_input
+in_temp_chg_temp_hot_raw
+in_temp_chg_temp_input
+in_temp_chg_temp_raw
+in_temp_chg_temp_too_hot_input
+in_temp_chg_temp_too_hot_raw
+in_temp_die_temp_input
+in_temp_die_temp_raw
+in_temp_skin_temp_hot_input
+in_temp_skin_temp_hot_raw
+in_temp_skin_temp_input
+in_temp_skin_temp_raw
+in_temp_skin_temp_too_hot_input
+in_temp_skin_temp_too_hot_raw
+ sampling:

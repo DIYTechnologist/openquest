@@ -1,0 +1,22 @@
+dev
+power
+spi
+subsystem
+swd
+uevent
+---SPI-DRIVER---
+bind
+spi12.0
+uevent
+unbind
+---STREAMDEV-ATTRS---
+dev
+power
+subsystem
+uevent
+== syncboss0
+  772 sensors@1.0-ser
+== syncboss_stream0
+  772 sensors@1.0-ser
+== syncboss_control0
+  772 sensors@1.0-ser

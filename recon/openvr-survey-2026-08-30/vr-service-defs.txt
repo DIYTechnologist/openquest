@@ -1,0 +1,15 @@
+=== trackingservice ===
+FILE:/system/etc/init/trackingservice.rc
+service trackingservice /system/bin/trackingservice
+=== calibration_svr ===
+FILE:/system/etc/init/calibrationserver.rc
+service calibration_svr /system/bin/calibrationserver
+=== vrapi_svr ===
+FILE:/system/etc/init/vrapiserver.rc
+service vrapi_svr /system/bin/vrapiserver
+=== vrfocus ===
+FILE:/system/etc/init/vrfocusserver.rc
+service vrfocus /system/bin/vrfocusserver
+=== cameramuxmodeservice ===
+FILE:/system/etc/init/cameramuxmodeservice.rc
+service cameramuxmodeservice /system/bin/cameramuxmodeservice

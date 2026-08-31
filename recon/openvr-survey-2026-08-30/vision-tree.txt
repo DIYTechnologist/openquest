@@ -1,0 +1,98 @@
+/vision:
+total 72
+drwxrwx--x  9 system system  4096 2026-08-30 14:15 .
+drwxr-xr-x 21 root   root    4096 2009-01-01 00:00 ..
+drwx------  2 system system  4096 1970-06-09 16:56 config
+drwx------  2 system system  4096 1970-06-09 16:56 data
+drwx------  2 system system  4096 2026-08-30 14:15 handtracking
+drwx------  3 system system  4096 2024-07-31 10:02 insideout
+drwx------  2 root   root   16384 1970-06-09 16:56 lost+found
+drwx------  2 system system  4096 1970-06-09 16:56 mapdata
+drwx------  3 root   root    4096 1970-06-09 16:56 unencrypted
+
+/vision/config:
+total 16
+drwx------ 2 system system 4096 1970-06-09 16:56 .
+drwxrwx--x 9 system system 4096 2026-08-30 14:15 ..
+
+/vision/data:
+total 16
+drwx------ 2 system system 4096 1970-06-09 16:56 .
+drwxrwx--x 9 system system 4096 2026-08-30 14:15 ..
+
+/vision/handtracking:
+total 16
+drwx------ 2 system system 4096 2026-08-30 14:15 .
+drwxrwx--x 9 system system 4096 2026-08-30 14:15 ..
+-rw------- 1 system system  352 2026-08-30 23:14 PersonalizationConfig.json
+
+/vision/insideout:
+total 16
+drwx------ 3 system system 4096 2024-07-31 10:02 .
+drwxrwx--x 9 system system 4096 2026-08-30 14:15 ..
+drwx------ 2 system system 4096 2026-08-30 23:15 mapdb
+
+/vision/insideout/mapdb:
+total 6040
+drwx------ 2 system system    4096 2026-08-30 23:15 .
+drwx------ 3 system system    4096 2024-07-31 10:02 ..
+-rw------- 1 system system     158 2026-08-30 23:15 ad_096760f1-43f4-7aa4-ea39-708905368f3d.mapdata
+-rw------- 1 system system     158 2026-08-30 23:01 ad_89af3b77-6726-f93c-f6b8-deee258ef0df.mapdata
+-rw------- 1 system system     158 2026-08-30 23:01 ad_e24e201a-bb1c-0e47-7dd0-87cef376b223.mapdata
+-rw------- 1 system system      44 2026-08-30 23:01 nd_2da8364d-58dc-005f-554f-49ea1b963d84_11.mapdata
+-rw------- 1 system system      22 2026-08-30 23:01 nd_2da8364d-58dc-005f-554f-49ea1b963d84_6.mapdata
+-rw------- 1 system system   10681 2026-08-30 23:15 nd_80ef53eb-1f65-6e47-4d96-2acc846297a7_1.mapdata
+-rw------- 1 system system       3 2026-08-30 23:15 nd_80ef53eb-1f65-6e47-4d96-2acc846297a7_12.mapdata
+-rw------- 1 system system  696478 2026-08-30 23:15 nd_80ef53eb-1f65-6e47-4d96-2acc846297a7_2.mapdata
+-rw------- 1 system system      50 2026-08-30 23:15 nd_80ef53eb-1f65-6e47-4d96-2acc846297a7_3.mapdata
+-rw------- 1 system system       7 2026-08-30 23:15 nd_80ef53eb-1f65-6e47-4d96-2acc846297a7_4.mapdata
+-rw------- 1 system system      53 2026-08-30 23:15 nd_80ef53eb-1f65-6e47-4d96-2acc846297a7_9.mapdata
+-rw------- 1 system system   18331 2026-08-30 23:01 nd_c89ba3ca-ad7b-3e9b-cc13-2dc5fb3bdfad_1.mapdata
+-rw------- 1 system system       3 2026-08-30 23:01 nd_c89ba3ca-ad7b-3e9b-cc13-2dc5fb3bdfad_12.mapdata
+-rw------- 1 system system 1577650 2026-08-30 23:01 nd_c89ba3ca-ad7b-3e9b-cc13-2dc5fb3bdfad_2.mapdata
+-rw------- 1 system system      50 2026-08-30 23:01 nd_c89ba3ca-ad7b-3e9b-cc13-2dc5fb3bdfad_3.mapdata
+-rw------- 1 system system       7 2026-08-30 23:01 nd_c89ba3ca-ad7b-3e9b-cc13-2dc5fb3bdfad_4.mapdata
+-rw------- 1 system system      53 2026-08-30 23:01 nd_c89ba3ca-ad7b-3e9b-cc13-2dc5fb3bdfad_9.mapdata
+-rw------- 1 system system   18010 2026-08-30 23:01 nd_cbcb08d2-0151-6cfe-8302-db4b10f1ae6e_1.mapdata
+-rw------- 1 system system       3 2026-08-30 23:01 nd_cbcb08d2-0151-6cfe-8302-db4b10f1ae6e_12.mapdata
+-rw------- 1 system system 1627911 2026-08-30 23:01 nd_cbcb08d2-0151-6cfe-8302-db4b10f1ae6e_2.mapdata
+-rw------- 1 system system      50 2026-08-30 23:01 nd_cbcb08d2-0151-6cfe-8302-db4b10f1ae6e_3.mapdata
+-rw------- 1 system system       7 2026-08-30 23:01 nd_cbcb08d2-0151-6cfe-8302-db4b10f1ae6e_4.mapdata
+-rw------- 1 system system      53 2026-08-30 23:01 nd_cbcb08d2-0151-6cfe-8302-db4b10f1ae6e_9.mapdata
+-rw------- 1 system system      44 2026-08-30 23:15 nd_ceccf3e8-e929-63a6-6a96-d0794ce38ff7_11.mapdata
+-rw------- 1 system system      22 2026-08-30 23:15 nd_ceccf3e8-e929-63a6-6a96-d0794ce38ff7_6.mapdata
+-rw------- 1 system system   16784 2026-08-30 23:15 nd_e1fb97fb-9b81-8df1-b60d-db7a170b05f9_1.mapdata
+-rw------- 1 system system       3 2026-08-30 23:15 nd_e1fb97fb-9b81-8df1-b60d-db7a170b05f9_12.mapdata
+-rw------- 1 system system 2093727 2026-08-30 23:15 nd_e1fb97fb-9b81-8df1-b60d-db7a170b05f9_2.mapdata
+-rw------- 1 system system      50 2026-08-30 23:15 nd_e1fb97fb-9b81-8df1-b60d-db7a170b05f9_3.mapdata
+-rw------- 1 system system       7 2026-08-30 23:15 nd_e1fb97fb-9b81-8df1-b60d-db7a170b05f9_4.mapdata
+-rw------- 1 system system      53 2026-08-30 23:15 nd_e1fb97fb-9b81-8df1-b60d-db7a170b05f9_9.mapdata
+
+/vision/lost+found:
+total 28
+drwx------ 2 root   root   16384 1970-06-09 16:56 .
+drwxrwx--x 9 system system  4096 2026-08-30 14:15 ..
+
+/vision/mapdata:
+total 16
+drwx------ 2 system system 4096 1970-06-09 16:56 .
+drwxrwx--x 9 system system 4096 2026-08-30 14:15 ..
+
+/vision/unencrypted:
+total 36
+drwx------ 3 root   root   4096 1970-06-09 16:56 .
+drwxrwx--x 9 system system 4096 2026-08-30 14:15 ..
+drwx------ 2 root   root   4096 1970-06-09 16:56 key
+-rw------- 1 root   root     15 1970-06-10 03:27 mode
+-rw------- 1 root   root      8 1970-06-10 03:27 per_boot_ref
+-rw------- 1 root   root      8 1970-06-10 03:27 ref
+
+/vision/unencrypted/key:
+total 48
+drwx------ 2 root root  4096 1970-06-09 16:56 .
+drwx------ 3 root root  4096 1970-06-09 16:56 ..
+-rw------- 1 root root    92 1970-06-09 16:56 encrypted_key
+-rw------- 1 root root   427 1970-06-09 16:56 keymaster_key_blob
+-rw------- 1 root root 16384 1970-06-09 16:56 secdiscardable
+-rw------- 1 root root    10 1970-06-09 16:56 stretching
+-rw------- 1 root root     1 1970-06-09 16:56 version

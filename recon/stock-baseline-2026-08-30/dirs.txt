@@ -1,0 +1,16 @@
+/data/adb:
+total 16
+drwx------  2 root   root   u:object_r:adb_data_file:s0    4096 1970-06-09 16:56 .
+drwxrwx--x 48 system system u:object_r:system_data_file:s0 4096 2026-08-30 22:25 ..
+
+/debug_ramdisk:
+total 8
+drwxr-xr-x  2 root root u:object_r:tmpfs:s0  4096 2009-01-01 00:00 .
+drwxr-xr-x 21 root root u:object_r:rootfs:s0 4096 2009-01-01 00:00 ..
+
+/sbin:
+total 1956
+drwxr-x---  2 root shell u:object_r:rootfs:s0    4096 2009-01-01 00:00 .
+drwxr-xr-x 21 root root  u:object_r:rootfs:s0    4096 2009-01-01 00:00 ..
+-rwxr-x---  1 root shell u:object_r:rootfs:s0 1420304 2009-01-01 00:00 slideshow
+-rwxr-x---  1 root shell u:object_r:rootfs:s0  570488 2009-01-01 00:00 sysimgcheck

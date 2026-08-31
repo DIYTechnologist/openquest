@@ -1,0 +1,7 @@
+Permissive
+--- boot props:
+[ro.boot.flash.locked]: [0]
+[ro.boot.slot_suffix]: [_a]
+[ro.boot.verifiedbootstate]: [orange]
+[ro.boot.veritymode]: [enforcing]
+[sys.boot_completed]: [1]

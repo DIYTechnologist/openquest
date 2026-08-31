@@ -1,0 +1,352 @@
+/persist:
+total 320
+drwxrwx--x 23 root      system    4096 1971-01-21 06:21 .
+drwxr-xr-x 21 root      root      4096 2009-01-01 00:00 ..
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 BAT_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 BB_SN
+-rw-r--r--  1 root      root        14 2020-05-28 02:34 BLCAM_SN
+-rw-r--r--  1 root      root        14 2020-05-28 02:34 BRCAM_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 FAN_SN
+drwxr-x---  2 root      root      4096 1970-01-01 01:00 FTM_AP
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 HPIPE_SN
+-rw-r--r--  1 root      root         4 2020-05-28 02:34 IAD_MAX
+-rw-r--r--  1 root      root         5 2020-05-28 02:34 IAD_MIN
+-rw-r--r--  1 root      root         4 2020-05-28 02:34 IPD_MAX
+-rw-r--r--  1 root      root         2 2020-05-28 02:34 IPD_MIN
+-rw-rw-rw-  1 root      root        16 2020-05-27 18:34 LDISP_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 LEYE_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 LLENS_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 LSPK_SN
+-rw-r--r--  1 root      root        14 1970-01-01 01:01 MLB_SN
+-rw-------  1 root      root         1 2020-05-28 04:28 PROX_PS_CAL_VERSION
+-rw-r--r--  1 root      root         2 2020-05-28 04:28 PROX_PS_CANC
+-rw-r--r--  1 root      root         2 2020-05-28 04:28 PROX_PS_THDH
+-rw-r--r--  1 root      root         2 2020-05-28 04:28 PROX_PS_THDL
+-rw-r--r--  1 root      root         5 2020-05-28 04:29 PROX_PS_THDW
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 PROX_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 RDISP_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 REYE_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 RLENS_SN
+-rw-rw-rw-  1 root      root        16 2020-05-27 18:34 RSPK_SN
+-rw-rw-rw-  1 root      root        14 2020-05-27 18:34 SFR_SN
+-rw-r--r--  1 root      root        14 2020-05-28 02:34 SYSTEM_SN
+-rw-r--r--  1 root      root        32 1970-01-01 01:13 TEST_RESULT
+-rw-r--r--  1 root      root        14 2020-05-28 02:34 TLCAM_SN
+-rw-r--r--  1 root      root        14 2020-05-28 02:34 TRCAM_SN
+drwxrwx---  2 system    system    4096 2020-07-14 19:55 alarm
+drwxrwx---  2 root      system    4096 1970-01-01 01:01 anti_piracy
+drwxr-x---  2 system    system    4096 1970-01-01 14:35 battery
+drwxrwx---  2 bluetooth bluetooth 4096 1970-01-01 01:03 bluetooth
+drwx------  2 root      system    4096 1970-01-01 01:00 bms
+drwxr-xr--  5 system    system    4096 2020-05-28 04:57 calibration
+drwxr-xr-x  2 system    system    4096 1970-01-01 01:26 certificates
+-rw-rw-rw-  1 root      root        14 1970-01-01 01:13 controller_sn_left.txt
+-rw-rw-rw-  1 root      root        14 1970-01-01 01:13 controller_sn_right.txt
+-rw-rw-rw-  1 root      root        16 1970-01-01 01:13 controller_uuid_left.txt
+-rw-rw-rw-  1 root      root        16 1970-01-01 01:13 controller_uuid_right.txt
+drwxr-xr-x  2 root      root      4096 1970-01-01 01:00 coresight
+drwx------  5 system    system    4096 2022-07-27 16:11 data
+drwxrwx---  2 system    graphics  4096 1970-01-01 01:00 display
+drwxrwx---  2 system    system    4096 1970-01-01 01:00 drm
+drwxrwx---  3 system    system    4096 1970-01-01 01:00 hlos_rfs
+drwx------  2 root      root      4096 1970-01-01 01:00 lost+found
+drwxrwx---  2 system    system    4096 1970-01-01 01:00 misc
+drwxrwx---  2 root      system    4096 1971-01-21 06:21 rc
+drwxrwx---  6 system    system    4096 1970-01-01 01:00 rfs
+drwxr-xr-x  2 root      root      4096 1970-01-01 01:00 sensors
+drwxr-xr-x  2 root      root      4096 2019-01-17 18:37 speccfg
+drwxrwx---  2 root      system    4096 1970-01-01 14:35 srt_push
+drwxrwx---  2 system    system    4096 2020-05-27 07:22 time
+-rw-r--r--  1 root      root        33 1970-01-01 01:03 wlan_mac.bin
+
+/persist/FTM_AP:
+total 40
+drwxr-x---  2 root root   4096 1970-01-01 01:00 .
+drwxrwx--x 23 root system 4096 1971-01-21 06:21 ..
+-rw-------  1 root root     23 1970-01-01 01:00 .setting
+-rw-------  1 root root   8332 1970-01-01 01:00 mmi-pcba.cfg
+-rw-------  1 root root   6931 1970-01-01 01:00 mmi.cfg
+
+/persist/alarm:
+total 24
+drwxrwx---  2 system system 4096 2020-07-14 19:55 .
+drwxrwx--x 23 root   system 4096 1971-01-21 06:21 ..
+-rw-------  1 system system    1 2021-07-03 20:39 powerOffAlarmSet
+-rw-------  1 system system   13 2021-07-04 03:20 timezone
+
+/persist/anti_piracy:
+total 16
+drwxrwx---  2 root system 4096 1970-01-01 01:01 .
+drwxrwx--x 23 root system 4096 1971-01-21 06:21 ..
+
+/persist/battery:
+total 36
+drwxr-x---  2 system system 4096 1970-01-01 14:35 .
+drwxrwx--x 23 root   system 4096 1971-01-21 06:21 ..
+-rw-------  1 system system   50 1970-01-01 01:01 cycle_count_on_activation
+-rw-r-----  1 root   system   49 2021-07-04 03:20 cycle_stats.bin
+-rw-------  1 system root     22 2026-08-30 15:07 qcom_cycle_counts_buckets
+-rw-------  1 root   root      2 1970-01-01 01:02 reset_state.bin
+-rw-------  1 system root     14 1970-01-01 14:35 serial_number
+
+/persist/bluetooth:
+total 20
+drwxrwx---  2 bluetooth bluetooth 4096 1970-01-01 01:03 .
+drwxrwx--x 23 root      system    4096 1971-01-21 06:21 ..
+-rw-------  1 bluetooth bluetooth    9 1970-01-01 01:03 .bt_nv.bin
+
+/persist/bms:
+total 20
+drwx------  2 root system 4096 1970-01-01 01:00 .
+drwxrwx--x 23 root system 4096 1971-01-21 06:21 ..
+-rwx------  1 root root    100 2021-07-04 03:20 batt_info.txt
+
+/persist/calibration:
+total 60
+drwxr-xr--  5 system system 4096 2020-05-28 04:57 .
+drwxrwx--x 23 root   system 4096 1971-01-21 06:21 ..
+-rw-rw-rw-  1 root   root   1330 2020-05-27 20:57 camera_calibration.json
+-rw-rw-rw-  1 root   root   5258 2020-05-27 20:57 camera_calibration_v2.json
+drwxrwxrwx  4 root   root   4096 1970-01-01 01:05 display
+-rw-rw-rw-  1 root   root   2311 2020-05-27 20:57 imu_calibration.json
+-rw-rw-rw-  1 root   root    244 2020-05-27 20:49 mag_calibration.json
+drwxr--r--  2 system system 4096 2026-08-30 14:27 online
+drwxr--r--  2 system system 4096 2026-08-30 14:27 online.tmp
+
+/persist/calibration/display:
+total 32
+drwxrwxrwx 4 root   root   4096 1970-01-01 01:05 .
+drwxr-xr-- 5 system system 4096 2020-05-28 04:57 ..
+drwxrwxrwx 2 root   root   4096 2020-05-28 04:59 left
+drwxrwxrwx 2 root   root   4096 2020-05-28 04:59 right
+
+/persist/calibration/display/left:
+total 6776
+drwxrwxrwx 2 root root    4096 2020-05-28 04:59 .
+drwxrwxrwx 4 root root    4096 1970-01-01 01:05 ..
+-rw-rw-rw- 1 root root 6912021 2020-05-27 20:57 1TJ3508D2G0162.mura
+-rw-rw-rw- 1 root root      96 2020-05-27 20:57 1TJ3508D2G0162.uniformity
+-rw-rw-rw- 1 root root     222 2020-05-27 20:59 left_screen_offset.json
+
+/persist/calibration/display/right:
+total 6776
+drwxrwxrwx 2 root root    4096 2020-05-28 04:59 .
+drwxrwxrwx 4 root root    4096 1970-01-01 01:05 ..
+-rw-rw-rw- 1 root root 6912021 2020-05-27 20:57 1TJ35082QJ0162.mura
+-rw-rw-rw- 1 root root      96 2020-05-27 20:57 1TJ35082QJ0162.uniformity
+-rw-rw-rw- 1 root root     221 2020-05-27 20:59 right_screen_offset.json
+
+/persist/calibration/online:
+total 28
+drwxr--r-- 2 system system 4096 2026-08-30 14:27 .
+drwxr-xr-- 5 system system 4096 2020-05-28 04:57 ..
+-rw-r--r-- 1 system system 8839 2026-08-30 14:27 12695210652037270177
+
+/persist/calibration/online.tmp:
+total 16
+drwxr--r-- 2 system system 4096 2026-08-30 14:27 .
+drwxr-xr-- 5 system system 4096 2020-05-28 04:57 ..
+
+/persist/certificates:
+total 24
+drwxr-xr-x  2 system system 4096 1970-01-01 01:26 .
+drwxrwx--x 23 root   system 4096 1971-01-21 06:21 ..
+-rw-------  1 system root   1407 1970-01-01 01:26 device_identityinsecure.crt
+-rw-------  1 system root   1392 1970-01-01 01:26 device_identitysecure.crt
+
+/persist/coresight:
+total 68
+drwxr-xr-x  2 root root    4096 1970-01-01 01:00 .
+drwxrwx--x 23 root system  4096 1971-01-21 06:21 ..
+-rw-r--r--  1 root root    1573 2019-01-17 17:47 qdss.agent.sh
+-rw-r--r--  1 root root     807 2019-01-17 17:47 qdss.config.sh
+-rw-r--r--  1 root root   17404 2019-01-17 17:47 qdss.functions.sh
+-rw-rw-r--  1 root root   11944 1970-01-01 01:00 qdss.log
+-rw-rw-r--  1 root root   11944 1970-01-01 01:00 qdss.log.old
+
+/persist/data:
+total 36
+drwx------  5 system system 4096 2022-07-27 16:11 .
+drwxrwx--x 23 root   system 4096 1971-01-21 06:21 ..
+drwx------  2 system system 4096 1970-01-01 01:26 OVRTZ
+drwx------  2 system system 4096 2022-07-27 16:11 hdcpsrm
+drwx------  2 system system 4096 2022-07-27 16:11 widevine
+
+/persist/data/OVRTZ:
+total 60
+drwx------ 2 system system 4096 1970-01-01 01:26 .
+drwx------ 5 system system 4096 2022-07-27 16:11 ..
+-rwx------ 1 system system 8192 1970-01-01 01:26 7Za-GfF-Xp093Er7vyLXCZvShtFSYgTEKceK6iGZ5t
+-rwx------ 1 system system 4096 1970-01-01 01:26 7Za-GfF-Xp093Er7vyLXCZvShtFSYgTEKceK6iGZ5t.bak
+-rwx------ 1 system system 8192 1970-01-01 01:26 OVRTZ
+-rwx------ 1 system system 8192 1970-01-01 01:26 OVRTZ.bak
+-rwx------ 1 system system 8192 1970-01-01 01:25 S9nDiTSPjmwbGOelWC2jbd8P2ksUU+S68dv7Wb-MyA
+-rwx------ 1 system system 4096 1970-01-01 01:25 S9nDiTSPjmwbGOelWC2jbd8P2ksUU+S68dv7Wb-MyA.bak
+-rwx------ 1 system system  581 1970-01-01 01:02 vTable
+
+/persist/data/hdcpsrm:
+total 40
+drwx------ 2 system system 4096 2022-07-27 16:11 .
+drwx------ 5 system system 4096 2022-07-27 16:11 ..
+-rwx------ 1 system system 8192 2022-07-27 16:11 FTcL6tKXfb9kGa1GSVqLqsIA2V2tfrQfE2Mcz1hW2U
+-rwx------ 1 system system 4096 2022-07-27 16:11 FTcL6tKXfb9kGa1GSVqLqsIA2V2tfrQfE2Mcz1hW2U.bak
+-rwx------ 1 system system 8192 2022-07-27 16:11 hdcpsrm
+-rwx------ 1 system system 8192 2022-07-27 16:11 hdcpsrm.bak
+
+/persist/data/widevine:
+total 72
+drwx------ 2 system system 4096 2022-07-27 16:11 .
+drwx------ 5 system system 4096 2022-07-27 16:11 ..
+-rwx------ 1 system system 8192 1970-01-01 01:26 9Z53nb35VsXYVqxFBjk4YnylV0anSpbSYaV3W2CTd+
+-rwx------ 1 system system 8192 1970-01-01 01:26 9Z53nb35VsXYVqxFBjk4YnylV0anSpbSYaV3W2CTd+.bak
+-rwx------ 1 system system 8192 2020-07-15 23:45 lj1DQa52z397QTnXdtZzswOkeRM4GWh8e8B2YgFiqB
+-rwx------ 1 system system 4096 2020-07-15 23:45 lj1DQa52z397QTnXdtZzswOkeRM4GWh8e8B2YgFiqB.bak
+-rwx------ 1 system system 8192 2022-07-27 16:11 py3NRljzDawCt4R+cdWRhFfQwoqAl-s4sAthjdsdwZ
+-rwx------ 1 system system 4096 2022-07-27 16:11 py3NRljzDawCt4R+cdWRhFfQwoqAl-s4sAthjdsdwZ.bak
+-rwx------ 1 system system 8192 2022-07-27 16:11 widevine
+-rwx------ 1 system system 8192 2022-07-27 16:11 widevine.bak
+
+/persist/display:
+total 16
+drwxrwx---  2 system graphics 4096 1970-01-01 01:00 .
+drwxrwx--x 23 root   system   4096 1971-01-21 06:21 ..
+
+/persist/drm:
+total 16
+drwxrwx---  2 system system 4096 1970-01-01 01:00 .
+drwxrwx--x 23 root   system 4096 1971-01-21 06:21 ..
+
+/persist/hlos_rfs:
+total 24
+drwxrwx---  3 system   system   4096 1970-01-01 01:00 .
+drwxrwx--x 23 root     system   4096 1971-01-21 06:21 ..
+drwxrwx---  2 oem_2951 oem_2952 4096 1970-01-01 01:00 shared
+
+/persist/hlos_rfs/shared:
+total 16
+drwxrwx--- 2 oem_2951 oem_2952 4096 1970-01-01 01:00 .
+drwxrwx--- 3 system   system   4096 1970-01-01 01:00 ..
+
+/persist/lost+found:
+total 16
+drwx------  2 root root   4096 1970-01-01 01:00 .
+drwxrwx--x 23 root system 4096 1971-01-21 06:21 ..
+
+/persist/misc:
+total 16
+drwxrwx---  2 system system 4096 1970-01-01 01:00 .
+drwxrwx--x 23 root   system 4096 1971-01-21 06:21 ..
+
+/persist/rc:
+total 16
+drwxrwx---  2 root system 4096 1971-01-21 06:21 .
+drwxrwx--x 23 root system 4096 1971-01-21 06:21 ..
+
+/persist/rfs:
+total 48
+drwxrwx---  6 system   system   4096 1970-01-01 01:00 .
+drwxrwx--x 23 root     system   4096 1971-01-21 06:21 ..
+drwx------  3 oem_2951 oem_2951 4096 1970-01-01 01:00 apq
+drwx------  6 oem_2951 oem_2951 4096 1970-01-01 01:00 mdm
+drwx------  5 oem_2951 oem_2951 4096 1970-01-01 01:00 msm
+drwx------  2 oem_2951 oem_2951 4096 1970-01-01 01:00 shared
+
+/persist/rfs/apq:
+total 24
+drwx------ 3 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwxrwx--- 6 system   system   4096 1970-01-01 01:00 ..
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 gnss
+
+/persist/rfs/apq/gnss:
+total 16
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwx------ 3 oem_2951 oem_2951 4096 1970-01-01 01:00 ..
+
+/persist/rfs/mdm:
+total 48
+drwx------ 6 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwxrwx--- 6 system   system   4096 1970-01-01 01:00 ..
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 adsp
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 mpss
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 slpi
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 tn
+
+/persist/rfs/mdm/adsp:
+total 16
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwx------ 6 oem_2951 oem_2951 4096 1970-01-01 01:00 ..
+
+/persist/rfs/mdm/mpss:
+total 16
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwx------ 6 oem_2951 oem_2951 4096 1970-01-01 01:00 ..
+
+/persist/rfs/mdm/slpi:
+total 16
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwx------ 6 oem_2951 oem_2951 4096 1970-01-01 01:00 ..
+
+/persist/rfs/mdm/tn:
+total 16
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwx------ 6 oem_2951 oem_2951 4096 1970-01-01 01:00 ..
+
+/persist/rfs/msm:
+total 40
+drwx------ 5 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwxrwx--- 6 system   system   4096 1970-01-01 01:00 ..
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 adsp
+drwx------ 2 oem_2951 oem_2951 4096 2021-07-03 20:38 mpss
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 slpi
+
+/persist/rfs/msm/adsp:
+total 16
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwx------ 5 oem_2951 oem_2951 4096 1970-01-01 01:00 ..
+
+/persist/rfs/msm/mpss:
+total 20
+drwx------ 2 oem_2951 oem_2951 4096 2021-07-03 20:38 .
+drwx------ 5 oem_2951 oem_2951 4096 1970-01-01 01:00 ..
+-rw------- 1 oem_2951 oem_2951    5 2021-07-03 20:38 server_check.txt
+
+/persist/rfs/msm/slpi:
+total 16
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwx------ 5 oem_2951 oem_2951 4096 1970-01-01 01:00 ..
+
+/persist/rfs/shared:
+total 20
+drwx------ 2 oem_2951 oem_2951 4096 1970-01-01 01:00 .
+drwxrwx--- 6 system   system   4096 1970-01-01 01:00 ..
+-rw-rw---- 1 oem_2951 oem_2951   15 1970-01-01 01:00 server_info.txt
+
+/persist/sensors:
+total 52
+drwxr-xr-x  2 root   root    4096 1970-01-01 01:00 .
+drwxrwx--x 23 root   system  4096 1971-01-21 06:21 ..
+-rw-r--r--  1 root   root       2 2019-01-17 17:47 aon_enable
+-rw-r--r--  1 system root       2 2019-01-17 17:47 sensors_settings
+-rwx------  1 root   root   25468 1970-01-01 01:00 sns.reg
+
+/persist/speccfg:
+total 20
+drwxr-xr-x  2 root   root   4096 2019-01-17 18:37 .
+drwxrwx--x 23 root   system 4096 1971-01-21 06:21 ..
+-rw-r--r--  1 system system    0 2019-01-18 03:12 .not_triggered
+-rw-r--r--  1 system system    4 2019-01-18 03:12 devicetype
+-rw-r--r--  1 system system    0 2019-01-18 03:12 mbnversion
+-rw-r--r--  1 root   root      0 2019-01-18 03:12 qgpversion
+
+/persist/srt_push:
+total 16
+drwxrwx---  2 root system 4096 1970-01-01 14:35 .
+drwxrwx--x 23 root system 4096 1971-01-21 06:21 ..
+
+/persist/time:
+total 28
+drwxrwx---  2 system system  4096 2020-05-27 07:22 .
+drwxrwx--x 23 root   system  4096 1971-01-21 06:21 ..
+-rw-------  1 system net_raw    8 2021-07-04 00:04 ats_1
+-rw-------  1 system net_raw    8 2021-07-04 00:04 ats_16
+-rw-------  1 system net_raw    8 2021-07-04 00:04 ats_2

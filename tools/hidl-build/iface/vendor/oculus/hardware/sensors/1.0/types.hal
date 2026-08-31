@@ -1,0 +1,17 @@
+package vendor.oculus.hardware.sensors@1.0;
+
+enum Result : int32_t {
+    OK = 0,
+    ERROR = 1,
+    NOT_SUPPORTED = 2,
+    PERMISSION_DENIED = 3,
+    INVALID_OPERATION = 4,
+    BAD_VALUE = 5,
+};
+
+struct SensorClientInfo {
+    string name;          // embedded hidl_string @ offset 0
+    uint64_t field0;      // 24 bytes of scalars @ offset 16 (exact split irrelevant when zeroed)
+    uint64_t field1;
+    uint64_t field2;
+};

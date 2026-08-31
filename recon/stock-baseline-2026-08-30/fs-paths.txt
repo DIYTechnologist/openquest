@@ -1,0 +1,17 @@
+PRESENT  drwxr-xr-x 21 root root u:object_r:rootfs:s0 4096 2009-01-01 00:00 /
+PRESENT  lrwxr-x--- 1 root shell u:object_r:init_exec:s0 16 2009-01-01 00:00 /init -> /system/bin/init
+PRESENT  drwxr-x--- 2 root shell u:object_r:rootfs:s0 4096 2009-01-01 00:00 /sbin
+PRESENT  -rwxr-xr-x 1 root shell u:object_r:init_exec:s0 671088 2009-01-01 00:00 /system/bin/init
+PRESENT  drwxr-xr-x 2 root root u:object_r:tmpfs:s0 4096 2009-01-01 00:00 /debug_ramdisk
+PRESENT  drwx------ 2 root root u:object_r:adb_data_file:s0 4096 1970-06-09 16:56 /data/adb
+ABSENT   /data/adb/magisk
+ABSENT   /overlay.d
+PRESENT  brw------- 1 root root u:object_r:dm_device:s0 252,   0 1970-06-10 02:38 /dev/block/dm-0
+PRESENT  lrw-r--r-- 1 root root u:object_r:cache_file:s0 11 2009-01-01 00:00 /cache -> /data/cache
+ABSENT   /metadata
+PRESENT  drwxrwx--x 23 root system u:object_r:persist_file:s0 4096 1971-01-21 06:21 /persist
+PRESENT  drwx------ 3 root root u:object_r:unencrypted_data_file:s0 4096 1970-06-09 16:56 /data/unencrypted
+PRESENT  drwxrwxrwx 2 shell shell u:object_r:shell_data_file:s0 4096 2026-08-30 22:27 /data/local/tmp/q1u
+PRESENT  drwxr-xr-x 14 root root u:object_r:system_file:s0 4096 2009-01-01 00:00 /system
+PRESENT  lrw-r--r-- 1 root root u:object_r:vendor_file:s0 14 2009-01-01 00:00 /vendor -> /system/vendor
+PRESENT  drwxr-xr-x 2 root root u:object_r:vendor_file:s0 4096 2009-01-01 00:00 /odm

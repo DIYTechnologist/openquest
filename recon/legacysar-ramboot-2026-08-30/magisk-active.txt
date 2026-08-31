@@ -1,0 +1,26 @@
+=== getenforce:
+Enforcing
+=== id:
+uid=2000(shell) gid=2000(shell) groups=2000(shell),1004(input),1007(log),1011(adb),1015(sdcard_rw),1028(sdcard_r),3001(net_bt_admin),3002(net_bt),3003(inet),3006(net_bw_stats),3009(readproc),3011(uhid) context=u:r:shell:s0
+=== magisk version:
+30.7:MAGISK:R
+30700
+=== /sbin:
+ls: /sbin/sysimgcheck: Permission denied
+ls: /sbin/slideshow: Permission denied
+magisk
+magiskinit
+resetprop
+su
+supolicy
+=== magiskd:
+root           678     1   74060   3960 0                   0 S magiskd
+=== root mount:
+/dev/root / ext4 ro,seclabel,nodev,relatime 0 0
+=== mounts w/ magisk:
+magisk /sbin tmpfs rw,seclabel,relatime,size=1931744k,nr_inodes=482936,mode=755 0 0
+magisk /sbin/.magisk/worker tmpfs rw,seclabel,relatime,size=1931744k,nr_inodes=482936,mode=755 0 0
+=== boot_completed:
+1
+=== slot:
+_a

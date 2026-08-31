@@ -1,0 +1,161 @@
+major minor  #blocks  name
+
+   1        0       8192 ram0
+   1        1       8192 ram1
+   1        2       8192 ram2
+   1        3       8192 ram3
+   1        4       8192 ram4
+   1        5       8192 ram5
+   1        6       8192 ram6
+   1        7       8192 ram7
+   1        8       8192 ram8
+   1        9       8192 ram9
+   1       10       8192 ram10
+   1       11       8192 ram11
+   1       12       8192 ram12
+   1       13       8192 ram13
+   1       14       8192 ram14
+   1       15       8192 ram15
+ 253        0    1950176 zram0
+   8       80     131072 sdf
+   8       81       2048 sdf1
+   8       82       2048 sdf2
+   8       83       2048 sdf3
+   8       84          4 sdf4
+   8        0   60653568 sda
+   8        1          8 sda1
+   8        2      32768 sda2
+   8        3       1024 sda3
+   8        4        512 sda4
+   8        5        512 sda5
+   8        6    2621440 sda6
+   8        7    2621440 sda7
+   8        8      65536 sda8
+   8        9     524288 sda9
+   8       10   54785996 sda10
+   8       32       4096 sdc
+   8       33       4052 sdc1
+   8       16       4096 sdb
+   8       17       4052 sdb1
+   8       48     131072 sdd
+   8       49          4 sdd1
+   8       50       1024 sdd2
+   8       64    1572864 sde
+   8       65        512 sde1
+   8       66       2048 sde2
+   8       67        512 sde3
+   8       68        512 sde4
+   8       69     112640 sde5
+   8       70       1024 sde6
+   8       71      16384 sde7
+   8       72       1024 sde8
+   8       73        512 sde9
+   8       74      65536 sde10
+   8       75        512 sde11
+   8       76        512 sde12
+   8       77        128 sde13
+   8       78        512 sde14
+   8       79       2048 sde15
+ 259        0        512 sde16
+ 259        1        512 sde17
+ 259        2     112640 sde18
+ 259        3       1024 sde19
+ 259        4      16384 sde20
+ 259        5       1024 sde21
+ 259        6        512 sde22
+ 259        7      65536 sde23
+ 259        8        512 sde24
+ 259        9        512 sde25
+ 259       10        128 sde26
+ 259       11         16 sde27
+ 259       12          4 sde28
+ 259       13       1024 sde29
+ 259       14        256 sde30
+ 259       15        256 sde31
+ 259       16          4 sde32
+ 259       17      33424 sde33
+ 259       18          4 sde34
+ 259       19       1024 sde35
+ 259       20       8192 sde36
+ 259       21       2048 sde37
+ 259       22      65536 sde38
+ 259       23        128 sde39
+ 252        0    2580508 dm-0
+
+total 0
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 abl_a -> /dev/block/sde8
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 abl_b -> /dev/block/sde21
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 apdp -> /dev/block/sde30
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 bluetooth_a -> /dev/block/sde6
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 bluetooth_b -> /dev/block/sde19
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 boot_a -> /dev/block/sde10
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 boot_b -> /dev/block/sde23
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 cdt -> /dev/block/sdd1
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 cmnlib64_a -> /dev/block/sde12
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 cmnlib64_b -> /dev/block/sde25
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 cmnlib_a -> /dev/block/sde11
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 cmnlib_b -> /dev/block/sde24
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 ddr -> /dev/block/sdd2
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 devcfg_a -> /dev/block/sde13
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 devcfg_b -> /dev/block/sde26
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 devinfo -> /dev/block/sde28
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 dip -> /dev/block/sde29
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 dpo -> /dev/block/sde32
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 frp -> /dev/block/sda5
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 fsc -> /dev/block/sdf4
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 fsg -> /dev/block/sdf3
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 hyp_a -> /dev/block/sde3
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 hyp_b -> /dev/block/sde16
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 keymaster_a -> /dev/block/sde9
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 keymaster_b -> /dev/block/sde22
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 keystore -> /dev/block/sda4
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 limits -> /dev/block/sde34
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 logdump -> /dev/block/sde38
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 logfs -> /dev/block/sde36
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 misc -> /dev/block/sda3
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 modem_a -> /dev/block/sde5
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 modem_b -> /dev/block/sde18
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 modemst1 -> /dev/block/sdf1
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 modemst2 -> /dev/block/sdf2
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 msadp -> /dev/block/sde31
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 ovrtz_a -> /dev/block/sde7
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 ovrtz_b -> /dev/block/sde20
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 persist -> /dev/block/sda2
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 pmic_a -> /dev/block/sde4
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 pmic_b -> /dev/block/sde17
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 private -> /dev/block/sda8
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 rpm_a -> /dev/block/sde1
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 rpm_b -> /dev/block/sde14
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 sec -> /dev/block/sde27
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 splash -> /dev/block/sde33
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 ssd -> /dev/block/sda1
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 sti -> /dev/block/sde37
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 storsec -> /dev/block/sde39
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 system_a -> /dev/block/sda6
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 system_b -> /dev/block/sda7
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 toolsfv -> /dev/block/sde35
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 tz_a -> /dev/block/sde2
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 tz_b -> /dev/block/sde15
+lrwxrwxrwx 1 root root 16 1970-06-09 16:56 userdata -> /dev/block/sda10
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 vision -> /dev/block/sda9
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 xbl_a -> /dev/block/sdb1
+lrwxrwxrwx 1 root root 15 1970-06-09 16:56 xbl_b -> /dev/block/sdc1
+
+/sys/block/sda
+121307136
+4096
+/sys/block/sdb
+8192
+4096
+/sys/block/sdc
+8192
+4096
+/sys/block/sdd
+262144
+4096
+/sys/block/sde
+3145728
+4096
+/sys/block/sdf
+262144
+4096

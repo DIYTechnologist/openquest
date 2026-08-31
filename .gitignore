@@ -1,0 +1,46 @@
+# ─── Device dumps & backups (huge, per-unit, sensitive: serials/keys/calibration) ───
+/backups/
+/dumps/
+/work/
+/*.zip
+/1PASH9ACHD0215-*
+
+# ─── Downloaded toolchains & sources (regenerable — see README) ───
+/tools/android-ndk-r27c/
+/tools/android-ndk-r27c-linux.zip
+/tools/aosp-headers/
+/tools/hidl-build/hidl/
+/tools/hidl-build/libbase/
+/tools/hidl-build/gen/
+/tools/hidl-build/obj/
+/tools/hidl-build/hidl-gen
+/tools/hidl-build/*.tgz
+/tools/hidl-build/*.b64
+
+# ─── Pulled device binaries (redistribution-questionable; RE findings live in notes/) ───
+/recon/hal-A-2026-08-31/devlibs/
+recon/**/*.so
+recon/**/*debugdata*
+recon/hal-A-2026-08-31/vendor.oculus.hardware.sensors@1.0-service
+recon/config
+recon/config.gz
+
+# ─── Large binary artifacts (keep the small JSON/YAML calibration next to them) ───
+exports/**/*.mura
+exports/**/*.tar
+exports/**/*.bin
+exports/**/sns.reg
+
+# ─── Large captured logs (small text findings are kept) ───
+recon/**/dmesg.txt
+recon/**/logcat-all.txt
+
+# ─── Compiled probe/client binaries (sources are kept) ───
+tools/hal_probe/hal_probe
+tools/hal_stream/hal_stream
+tools/hal_stream/hal_stream2
+
+# ─── Editor / local ───
+.claude/settings.local.json
+*.o
+*.swp

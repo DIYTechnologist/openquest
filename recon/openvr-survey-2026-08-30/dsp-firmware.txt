@@ -1,0 +1,15 @@
+adsp.b00
+adsp.b01
+adsp.b02
+adsp.b03
+adsp.b04
+adsp.b05
+adsp.b06
+adsp.b08
+adsp.b09
+adsp.b11
+---
+libapps_mem_heap.so
+libdspCV_skel.so
+libvpp_frc.so
+libvpp_svc_skel.so

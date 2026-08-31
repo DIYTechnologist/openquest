@@ -1,0 +1,14 @@
+=== syncboss/nrf firmware ===
+-rw-r--r-- 1 root root 147920 2009-01-01 00:00 /vendor/firmware/syncboss.bin
+-rw-r--r-- 1 root root 147920 2009-01-01 00:00 /vendor/firmware/syncboss.bin
+=== sensors HAL binary ===
+-rwxr-xr-x 1 root shell  13064 2009-01-01 00:00 /vendor/bin/hw/vendor.oculus.hardware.sensors@1.0-iad
+-rwxr-xr-x 1 root shell 642480 2009-01-01 00:00 /vendor/bin/hw/vendor.oculus.hardware.sensors@1.0-service
+=== camera provider HAL ===
+=== video node names V4L2 ===
+video0: msm-config
+video1: msm_jpegdma
+video2: sde_rotator
+video3: msm-sensor
+video32: 
+video33: 
