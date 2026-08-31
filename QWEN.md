@@ -613,3 +613,29 @@ injection into the LIVE TS instead of restart-with-LD_PRELOAD.
 - Per-frame timestamp + which dmabuf = which of the 4 cams (correlate with FrameSet FMQ).
 - Frame↔IMU time sync (MontereyHostTimeSource / VsyncClock).
 - Non-disruptive injection (dlopen into live TS) to avoid the restart/video-drop.
+
+## RETRY SESSION 6 (Claude) — VIO TIME-SYNC SOLVED (hardware) [VERIFIED-CLAUDE] ✅
+
+**Camera exposure timestamps are on the syncboss stream, on the SAME nRF 1 MHz clock as the IMU.**
+Read `/dev/syncboss_stream0` during passthrough (non-disruptive, no restart) and found a THIRD
+packet type beyond IMU(0x50)/broadcast(0xe0):
+- **type 0x51, len 22, ~29.5 Hz** (ts deltas 33,890–33,896 µs = camera frame rate). One stream for
+  all 4 hardware-synced cams (single exposure trigger).
+- payload: `[0:4] u32 ts_us (nRF 1 MHz)`, `[4:8]=0`, `[8:20] 3× f32 (~5e-5, tiny — gyro-at-frame
+  or exposure?)`, `[20:22] u16 (~0x1890, wanders — TBD)`.
+- **Verified same clock:** each 0x51 ts falls exactly between its neighboring 0x50 IMU ts
+  (e.g. IMU 1831827632 | CAM 1831828503 | IMU 1831828638). So camera↔IMU time-sync is FREE — no
+  td estimation needed; both come from the same open kernel FIFO with comparable µs timestamps.
+
+**VIO data status:**
+- IMU: type 0x50, 1 kHz, {ts_us, accel(g), gyro(deg/s), temp} — syncboss FIFO. ✓
+- Camera exposure ts: type 0x51, 30 Hz, ts_us same clock — syncboss FIFO. ✓
+- Camera pixels: 640×480 mono ×4, trackingservice dmabuf tap (img_shim.c v2). ✓
+- Calibration: factory Fisheye62 → KB4 (tools/quest_calib_convert.py, exports/calibration-*). ✓ (verify)
+
+**Remaining for a Basalt dataset:**
+1. Associate pixel-frames ↔ 0x51 timestamps (ordinal match: Nth 0x51 ts ↔ Nth quad-frame; handle
+   drops). The pixel tap and the FIFO are separate streams captured together.
+2. Which dmabuf = which of 4 cams (exposure/mean groups; or FrameSet camId).
+3. Decode 0x51 floats + u16 (exposure? frame-id for robust association?).
+4. Emit EuRoC-format dataset (cam0-3 + timestamps.txt, imu0.csv, calib) → run Basalt.
