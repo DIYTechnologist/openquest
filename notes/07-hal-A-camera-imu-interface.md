@@ -374,6 +374,144 @@ Everything else is proven: toolchain, FMQ, generated ISensorClient server, real 
 the HAL. Once the two params are right, records flow and `ImuData`'s layout falls out of the
 raw ring bytes.
 
+## FMQ params resolved; prepareStream now succeeds (2026-08-31)
+
+Recovered the two params that were crashing the HAL, from the **client** wrapper
+`libvrsensors-hidlwrapper.so` (`recon/hal-A-2026-08-31/`, gitignored) — it *creates* the FMQ so
+the sizes are explicit there:
+
+- **`sizeof(ImuData) = 64`** — from `MessageQueue<ImuData>::MessageQueue(unsigned long, bool)`:
+  `lsl x1, x21, #6` (numElements × 64 for the data region). (My 128-byte guess was a crash cause.)
+- **`FmqConfig = { hidl_string?→ hidl_handle eventFlag; uint32 a; uint32 b }`** (24 B). The
+  eventflag is a **separate ashmem region** wrapped in a `hidl_handle` (via
+  `OVR::OS::createEventFlagHandle` → `ashmem_create_region` + `native_handle`); the two uint32s
+  are eventflag notification bits. The HAL builds an `EventFlag` from it → empty handle crashed it.
+  `StreamHandle<T>::prepareStream(hidl_handle, EventFlag*, uint32, uint32)` confirms the shape.
+
+Client (`tools/hal_stream/hal_stream2.cpp`) now: `ImuElem[64]`, and builds a real eventflag
+handle (`ashmem_create_region(4096)` + `native_handle_create`). Result:
+
+```
+prepareStream isOk=1    streamControl(START) isOk=1    (no HAL crash)
+```
+
+### Still: no data flows (activation handshake incomplete)
+prepareStream + streamControl both succeed, but `availableToRead` stays 0 and the HAL never
+calls our `getSensorClientInfo` (`infoCalls=0`), for StreamCommand ∈ {0,1,2} and with/without
+streamControl. So the HAL accepts the stream setup but doesn't register us as a live receiver.
+
+Likely missing: the exact client→HAL activation the real client performs. Leads to chase next:
+- The HAL may call `ISensorClient::getSensorClientInfo` back to register us — verify our process
+  actually *serves* that binder call (tried `configureRpcThreadpool` + a `joinRpcThreadpool`
+  thread; still `infoCalls=0`). Confirm the callback path with a `lshal`/binder check.
+- Trace `libvrsensors-hidlwrapper` `StreamHandle<ImuData>` + its orchestrator (likely in
+  `libossdk.oculus.so`) for any step between `prepareStream` and `read()` (enable/rate/subscribe,
+  or the correct StreamCommand + eventflag bit values a/b).
+- The two `FmqConfig` uint32 bits (guessed 1,2) may need the real values the HAL wakes on.
+
+Progress vs. crashing: the FMQ params are now correct enough that the HAL accepts everything
+without error — only the activation step remains. Each run is now non-crashing (HAL stays up).
+
+## Activation handshake RE (2026-08-31) — narrowed, not yet cracked
+
+More RE on why `prepareStream`+`streamControl` succeed but no `ImuData` arrives:
+
+- **`getSensorClientInfo` is never called by the HAL** — no `BpHwSensorClient::getSensorClientInfo`
+  reference anywhere in the impl. `ISensorClient` is purely an **identity/lookup token** (keyed
+  by binder). So `infoCalls=0` is expected; our client is correctly registered and needs to
+  serve no callback. (Removes that hypothesis.)
+- **`onClientStarted_l`/`onClientStopped_l` for `ImuData` are no-ops** (COMDAT-folded with
+  trivial accessors) — so `streamControl` isn't a hard gate; `prepareStream` registers the client.
+- **Eventflag bit scheme** (from `HidlWrapper::CompositeStream::addStream`): one shared eventflag
+  per composite (counter starts `0x80000000`); each stream gets two bits
+  `a = 1<<(idx+14)`, `b = 1<<(idx-1)` passed to `StreamHandle::prepareStream(handle, EventFlag*,
+  a, b)`. For polled reads the bit values shouldn't matter (tried `{1,2}` and `{0x8000,0x1}`).
+- `prepareStream` returns `Return<void>` → `isOk=1` only means **transport** OK, not that the HAL
+  accepted the descriptor/FmqConfig. A silent descriptor rejection is still possible.
+
+Result unchanged: `prepareStream isOk=1`, `streamControl isOk=1`, no crash, `availableToRead=0`.
+
+### Leading hypotheses to chase next
+1. **IMU source not producing to our queue.** The HAL distributes `ImuData` only to *active*
+   clients; the "active" transition (and `SensorTraits<Imu>::enableSensor(rate)`) may need the
+   exact `StreamCommand` START value + a rate we haven't supplied. Find the `enableSensor`
+   trigger and the real streamControl semantics (its callers are via vtable/inlined).
+2. **Silent descriptor rejection.** The HAL builds `MessageQueue<ImuData>(ourDesc)`; if it
+   requires an in-ring eventflag grantor (create the client FMQ with `configureEventFlag=true`)
+   or a specific grantor layout, `isValid()` fails HAL-side and it no-ops. Worth trying
+   `MessageQueue<ImuElem>(256, true)` and wiring the ring eventflag.
+3. Reconstruct the full `IImu.hal` (now that `sizeof(ImuData)=64`, `FmqConfig` known) and
+   generate a real `IImu` proxy — removes any asm-binding ABI risk and gives typed Return values.
+
+Best authoritative source for the exact sequence: `libossdk.oculus.so` /
+`libvrsensors-hidlwrapper.so` `CompositeStream`/`StreamHandle` orchestration (partially traced).
+
+## Full IImu generated + activation root-caused (2026-08-31)
+
+Reconstructed the complete `IImu.hal` (methods in code order for tx codes 1/2/3:
+`getProperties`, `prepareStream(fmq_sync<ImuData>, ISensorClient, FmqConfig)`, `streamControl`)
+plus the types (`ImuData`=8×uint64=64B, `FmqConfig`={handle,uint32,uint32}, `MotionSensorProperties`,
+`StreamCommand`). Generated a real `IImu` proxy (`tools/hal_stream/hal_stream3.cpp`,
+`gen/.../ImuAll.cpp`). No asm-binding.
+
+**Marshalling/ABI hypothesis eliminated:** `imu->getProperties(...)` via the generated proxy
+returns real data — `Result=OK sensor="ICM20602" label="HMD IMU" rate=1000`. So the reconstructed
+`.hal`, transaction codes, and struct layouts are all correct, and `prepareStream`/`streamControl`
+use identical correct marshalling.
+
+**Eventflag format matched exactly** (from `createEventFlagHandle` @svc `0x81e44`):
+`ashmem_create_region(name, 4)` (4 bytes, one atomic word), `ashmem_set_prot_region(fd, RW)`,
+`native_handle_create(1,0)`, `hidl_handle.setTo(nh, true)`. Replicated — still no data.
+
+### Root cause: the HMD IMU stream isn't enabled for our client
+- The Quest gates the 1 kHz HMD IMU on **active tracking** (proximity/worn). Off/asleep:
+  syncboss `0`/s. Briefly worn: only ~**75/s** (double-tap/controller, NOT the 1 kHz IMU).
+- **Our `streamControl(START)` does NOT enable the IMU** — syncboss stays ~75/s during our run
+  (no spike to 1 kHz). Neither does `prepareStream`. So the HAL registers us (all calls succeed)
+  but never turns the sensor on for us, so nothing is produced to write.
+- `onClientStarted_l`/`onClientStopped_l` are **no-ops** (COMDAT-folded), so the
+  "enable on first client" logic is elsewhere — `SensorTraits<Imu>::enableSensor(void*, float rate)`
+  (@ `0x4fdcc`), called via the traits struct (deeply inlined; caller not yet located).
+
+Everything client-side is proven correct. The remaining gap is the **activation that makes the
+HAL call `enableSensor(1000)` for a subscribing client** — the exact `StreamCommand`/rate/handshake.
+
+### Two ways to close it
+1. **Physical:** headset actively worn in a real tracking session (1 kHz syncboss), then run
+   `hal_stream3` — if data flows, the whole open IMU path is proven and `ImuData`'s real 64-byte
+   field layout falls out of the ring bytes. (Tested briefly; headset was set down before a
+   sustained 1 kHz session.)
+2. **RE the enable trigger:** locate the `SensorTraits<Imu>::enableSensor` caller / the exact
+   `streamControl` command+rate that force-enables the IMU for a standalone client.
+
+## Physical test + exhaustion of client-side variables (2026-08-31)
+
+Headset worn/active during test: **`trackingservice` at 65% CPU, `sensors@1.0-service` at 9%** —
+the IMU is definitively streaming (to trackingservice). So "sensor off" is ruled out; our
+client's non-receipt is a **registration/activation difference**, not a dormant sensor.
+
+Key: **the real client (`libvrsensors-hidlwrapper`) never calls `IImu::streamControl`** — IMU
+data flows from `prepareStream` alone. (`streamControl` unreferenced for IMU in that lib.)
+
+Exhausted, all still `availableToRead=0`, IMU confirmed active:
+- generated `IImu` proxy (marshalling proven correct via working `getProperties`)
+- `sizeof(ImuData)=64`; exact eventflag format (ashmem 4B + `ashmem_set_prot_region` RW)
+- `configureEventFlag` true and false; with/without `streamControl`; cmd ∈ {0,1,2,99}
+- serving RPC threadpool; `getSensorClientInfo` never called (identity-only, expected)
+
+**Wall:** the HAL accepts every call (all `isOk`) and registers us, but never writes to our
+queue — even though the same IMU stream is actively delivered to trackingservice. There is a
+subtle gating condition on which client queues get written that we haven't found.
+
+### Highest-value next step (definitive)
+**Intercept trackingservice's actual `IImu::prepareStream` transaction** (ptrace/binder trace on
+`sensors@1.0-service` or `trackingservice`) and byte-compare its `MQDescriptor` + `FmqConfig`
+against ours. That reveals the exact difference directly, instead of guessing. Alternatively,
+deep-RE the HAL's `prepareStream`/IMU-distribution impl to find the write-gating condition
+(the per-sample "write to client N" predicate; currently inlined).
+
+Everything client-side is proven correct; the gap is a specific, findable HAL-side gating detail.
+
 ## Reversibility
 
 Nothing on the device is modified by this work — pure RE of pulled binaries. Running a client

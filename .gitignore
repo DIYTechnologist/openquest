@@ -39,6 +39,7 @@ recon/**/logcat-all.txt
 tools/hal_probe/hal_probe
 tools/hal_stream/hal_stream
 tools/hal_stream/hal_stream2
+tools/hal_stream/hal_stream3
 
 # ─── Editor / local ───
 .claude/settings.local.json

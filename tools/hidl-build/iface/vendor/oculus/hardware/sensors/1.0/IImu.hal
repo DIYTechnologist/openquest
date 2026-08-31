@@ -1,0 +1,10 @@
+package vendor.oculus.hardware.sensors@1.0;
+
+import ISensorClient;
+
+interface IImu {
+    // method order fixes transaction codes: getProperties=1, prepareStream=2, streamControl=3
+    getProperties() generates (Result result, MotionSensorProperties properties);
+    prepareStream(fmq_sync<ImuData> queue, ISensorClient client, FmqConfig config);
+    streamControl(ISensorClient client, StreamCommand command);
+};

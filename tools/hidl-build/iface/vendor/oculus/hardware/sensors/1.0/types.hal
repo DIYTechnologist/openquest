@@ -9,9 +9,38 @@ enum Result : int32_t {
     BAD_VALUE = 5,
 };
 
+enum StreamCommand : uint32_t {
+    CMD0 = 0,
+    CMD1 = 1,
+    CMD2 = 2,
+};
+
 struct SensorClientInfo {
     string name;          // embedded hidl_string @ offset 0
-    uint64_t field0;      // 24 bytes of scalars @ offset 16 (exact split irrelevant when zeroed)
+    uint64_t field0;      // 24 bytes of scalars @ offset 16
     uint64_t field1;
     uint64_t field2;
+};
+
+// FMQ eventflag config: hidl_handle(16) + 2x uint32 = 24 bytes (RE-verified).
+struct FmqConfig {
+    handle eventFlag;
+    uint32_t bitA;
+    uint32_t bitB;
+};
+
+// IMU sample FMQ element. sizeof == 64 (RE-verified via client MessageQueue<ImuData> ctor).
+// Field breakdown unknown; 8x uint64 placeholder preserves the 64-byte wire size.
+struct ImuData {
+    uint64_t[8] payload;
+};
+
+// Returned by IImu.getProperties (RE-verified layout: 4x string, float rate@0x40, float@0x44).
+struct MotionSensorProperties {
+    string sensorType;          // e.g. "ICM20602"
+    string label;               // e.g. "HMD IMU"
+    string factoryCalibration;  // imu_calibration.json
+    string onlineCalibration;   // online-refined calib json
+    float rate;                 // Hz (1000)
+    float field44;
 };
