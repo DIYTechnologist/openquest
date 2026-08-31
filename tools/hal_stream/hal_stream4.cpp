@@ -83,7 +83,7 @@ static void protocol_thread() {
   printf("streamControl(%u) isOk=%d\n", g_cmd, r2.isOk());
 
   V1_0::ImuData rec; int got = 0;
-  for (int i = 0; i < 8000 && got < 6; i++) {
+  for (int i = 0; i < 120000 && got < 6; i++) {
     if (i % 500 == 0) printf("[t=%dms] availableToRead=%zu infoCalls=%d\n",
                               i, mq.availableToRead(), g_infoCalls.load());
     while (mq.read(&rec, 1)) {

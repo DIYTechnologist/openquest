@@ -52,3 +52,11 @@ tools/imu_intercept/*.so
 .claude/settings.local.json
 *.o
 *.swp
+
+# camera frame raws (keep PNGs)
+exports/**/*.gray
+exports/**/*.pgm
+tools/cam_tap/*.so
+tools/dmabuf_read/dmabuf_read
+tools/dmabuf_read/*.gray
+tools/mempeek/mempeek
