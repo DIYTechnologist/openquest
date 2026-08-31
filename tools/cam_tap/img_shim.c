@@ -1,89 +1,82 @@
-// img_shim.c — LD_PRELOAD into trackingservice. Camera frame tap, v2.
-// A background thread (started from a library constructor) scans /proc/self/maps for
-// anon_inode:dmabuf regions of camera-frame size and reads them DIRECTLY via their mapped VA
-// (works in-process even for VM_PFNMAP). It dumps every frame-sized buffer that has real image
-// content to /data/local/tmp/frame_<addr>.gray (latest snapshot), and logs per-buffer stats so
-// we can see which buffers are active/changing while cameras stream (tracking/passthrough).
-
+// img_shim.c v4 — LD_PRELOAD into trackingservice. Synchronized VIO capture:
+//  thread A (sb_reader): reads /dev/syncboss_stream0, host-timestamps every packet.
+//  thread B (pixel_scanner): change-detects camera dmabufs, dumps each new frame + host ts.
+// Both share CLOCK_MONOTONIC, so pixel frames align to syncboss type-0x51 exposure timestamps
+// by host time; Basalt then uses the precise nRF (syncboss) timestamps. Capture starts when
+// /data/local/tmp/cap/GO appears and runs CAP_NS, so tracking can converge first.
 #define _GNU_SOURCE
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <time.h>
+#include <sys/stat.h>
 
-#define LOG "/data/local/tmp/img_tap.log"
+#define DIR "/data/local/tmp/cap"
 #define FRAME_MIN 300000
 #define FRAME_MAX 400000
+#define MAXR 256
+#define CAP_NS (12ull*1000000000ull)
 
-static void tlog(const char* fmt, ...) {
-  char b[512]; va_list ap; va_start(ap, fmt); vsnprintf(b, sizeof(b), fmt, ap); va_end(ap);
-  int fd = open(LOG, O_WRONLY|O_CREAT|O_APPEND, 0666);
-  if (fd >= 0) { if (write(fd, b, strlen(b))) {} close(fd); }
-}
+static uint64_t mono_ns(void){ struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t); return (uint64_t)t.tv_sec*1000000000ull+t.tv_nsec; }
+static int wait_go(void){ while(access(DIR"/GO",F_OK)!=0) usleep(50000); return 1; }
 
-struct region { uintptr_t a, b; };
-
-static int scan_maps(struct region* out, int max) {
-  FILE* f = fopen("/proc/self/maps", "r");
-  if (!f) return 0;
-  char line[512]; int n = 0;
-  while (fgets(line, sizeof(line), f) && n < max) {
-    if (!strstr(line, "anon_inode:dmabuf")) continue;
-    uintptr_t a, b;
-    if (sscanf(line, "%lx-%lx", &a, &b) != 2) continue;
-    size_t sz = b - a;
-    if (sz < FRAME_MIN || sz > FRAME_MAX) continue;
-    // must be readable
-    if (strncmp(strchr(line,' ')+1, "r", 1) != 0) continue;
-    out[n].a = a; out[n].b = b; n++;
+static void* sb_reader(void* _){ (void)_;
+  wait_go();
+  int sfd=open("/dev/syncboss_stream0",O_RDONLY);
+  int out=open(DIR"/sb.rec",O_WRONLY|O_CREAT|O_TRUNC,0666);
+  if(sfd<0||out<0) return 0;
+  uint64_t t0=mono_ns(); uint8_t pkt[4096];
+  while(mono_ns()-t0 < CAP_NS){
+    int n=read(sfd,pkt,sizeof pkt);
+    if(n<=0) continue;
+    uint64_t h=mono_ns(); uint16_t L=n;
+    if(write(out,&h,8)){} if(write(out,&L,2)){} if(write(out,pkt,n)){}
   }
-  fclose(f);
-  return n;
+  close(sfd); close(out); return 0;
 }
 
-static void* scanner(void* arg) {
-  (void)arg;
-  tlog("[scanner v2 started]\n");
-  int cyc = 0;
-  for (;;) {
-    usleep(250000);
-    cyc++;
-    struct region rg[128];
-    int n = scan_maps(rg, 128);
-    if (cyc == 1 || cyc % 20 == 0) tlog("[cyc %d] dmabuf frame-regions=%d\n", cyc, n);
-    for (int i = 0; i < n; i++) {
-      const volatile uint8_t* p = (const volatile uint8_t*)rg[i].a;
-      size_t sz = rg[i].b - rg[i].a, N = sz < 307200 ? sz : 307200;
-      uint64_t sum = 0; uint32_t nz = 0, mx = 0, mn = 255;
-      // direct CPU reads of the mapped VA (in-process; ok for PFNMAP)
-      for (size_t k = 0; k < N; k += 7) { uint8_t v = p[k]; sum += v; if (v) nz++; if (v>mx) mx=v; if (v<mn) mn=v; }
-      double mean = (double)sum / (N/7);
-      // "real image": spread of values + not-all-zero + not-all-constant
-      int looks_img = (mx > 40 && mn < mx - 30 && nz > (N/7)/10);
-      if (looks_img) {
-        if (cyc % 8 == 0) tlog("  frame @%lx sz=%zu mean=%.0f min=%u max=%u nz=%.0f%%\n",
-                               rg[i].a, sz, mean, mn, mx, 100.0*nz/(N/7));
-        char op[96]; snprintf(op, sizeof(op), "/data/local/tmp/frame_%lx.gray", rg[i].a);
-        int of = open(op, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-        if (of >= 0) {
-          // copy through a local buffer (volatile read) to avoid write() copy_from_user on PFNMAP
-          static uint8_t buf[400000];
-          for (size_t k = 0; k < sz && k < sizeof(buf); k++) buf[k] = p[k];
-          if (write(of, buf, sz < sizeof(buf) ? sz : sizeof(buf))) {}
-          close(of);
-        }
-      }
+struct rg { uintptr_t a; size_t sz; uint64_t hash; int seq; };
+static struct rg R[MAXR]; static int NR;
+static uint64_t sample_hash(const volatile uint8_t* p, size_t sz){
+  uint64_t h=1469598103934665603ull;
+  for(size_t k=1000;k<sz;k+=4096){ h^=p[k]; h*=1099511628211ull; } return h;
+}
+static int find_rg(uintptr_t a){ for(int i=0;i<NR;i++) if(R[i].a==a) return i; return -1; }
+
+static void* pixel_scanner(void* _){ (void)_;
+  mkdir(DIR,0777); wait_go();
+  int idx=open(DIR"/frames.idx",O_WRONLY|O_CREAT|O_TRUNC,0666);
+  static uint8_t buf[FRAME_MAX];
+  uint64_t t0=mono_ns();
+  while(mono_ns()-t0 < CAP_NS){
+    usleep(5000);
+    FILE* f=fopen("/proc/self/maps","r"); if(!f) continue;
+    char line[512];
+    while(fgets(line,sizeof line,f)){
+      if(!strstr(line,"anon_inode:dmabuf")) continue;
+      uintptr_t a,b; if(sscanf(line,"%lx-%lx",&a,&b)!=2) continue;
+      size_t sz=b-a; if(sz<FRAME_MIN||sz>FRAME_MAX) continue;
+      const volatile uint8_t* p=(const volatile uint8_t*)a;
+      uint64_t hh=sample_hash(p,sz); int i=find_rg(a);
+      if(i<0){ if(NR<MAXR){ i=NR++; R[i].a=a; R[i].sz=sz; R[i].hash=hh; R[i].seq=0; } continue; }
+      if(hh==R[i].hash) continue; R[i].hash=hh;
+      uint32_t mn=255,mx=0; for(size_t k=1000;k<sz;k+=6143){uint8_t v=p[k]; if(v<mn)mn=v; if(v>mx)mx=v;}
+      if(mx-mn<24) continue;
+      uint64_t ts=mono_ns(); int seq=R[i].seq++;
+      for(size_t k=0;k<sz;k++) buf[k]=p[k];
+      char op[96]; snprintf(op,sizeof op,DIR"/f_%lx_%04d.gray",a,seq);
+      int of=open(op,O_WRONLY|O_CREAT|O_TRUNC,0644); if(of>=0){ if(write(of,buf,sz)){} close(of); }
+      char l[128]; int n=snprintf(l,sizeof l,"%llu %lx %d\n",(unsigned long long)ts,a,seq); if(write(idx,l,n)){}
     }
+    fclose(f);
   }
-  return 0;
+  close(idx); return 0;
 }
-
-__attribute__((constructor))
-static void img_shim_init(void) {
-  pthread_t t;
-  if (pthread_create(&t, 0, scanner, 0) == 0) pthread_detach(t);
+__attribute__((constructor)) static void init_(void){
+  pthread_t t; if(!pthread_create(&t,0,sb_reader,0)) pthread_detach(t);
+  pthread_t u; if(!pthread_create(&u,0,pixel_scanner,0)) pthread_detach(u);
 }
