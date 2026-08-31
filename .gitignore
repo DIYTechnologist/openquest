@@ -40,6 +40,13 @@ tools/hal_probe/hal_probe
 tools/hal_stream/hal_stream
 tools/hal_stream/hal_stream2
 tools/hal_stream/hal_stream3
+tools/hal_stream/hal_stream4
+tools/hal_stream/hal_stream5
+tools/hal_stream/clienttest
+tools/imu_intercept/*.so
+
+# ─── Editor / local tooling caches ───
+.tau/
 
 # ─── Editor / local ───
 .claude/settings.local.json

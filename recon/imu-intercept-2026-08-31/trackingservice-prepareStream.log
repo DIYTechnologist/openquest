@@ -1,0 +1,21 @@
+
+==== BpHwImu::prepareStream intercepted (this=0x7ba86a79c0 client=0x7fd940c298) ====
+  MQDescriptor head (32 B @ 0x7ba8721300):
+    0000  40 67 65 a8 7b 00 00 00 03 00 00 00 01 00 00 00 
+    0010  90 6c 6b a8 7b 00 00 00 40 00 00 00 01 00 00 00 
+  grantorCount=3 quantum=64 flags=1 handle=0x7ba86b6c90
+  grantors[] (48 B @ 0x7ba8656740):
+    0000  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0010  08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+    0020  08 00 00 00 00 00 00 00 08 00 00 00 00 00 00 00 
+  native_handle numFds=1 numInts=0
+  native_handle data (4 B @ 0x7ba86b6c9c):
+    0000  40 00 00 00 
+  FmqConfig (24 B @ 0x7fd940c2a0):
+    0000  00 6d 6b a8 7b 00 00 00 01 00 00 00 00 00 00 00 
+    0010  00 80 00 00 01 00 00 00 
+  eventFlag handle=0x7ba86b6d00 bitA=0x8000 bitB=0x1
+  ef native_handle numFds=1 numInts=0
+  ef data (4 B @ 0x7ba86b6d0c):
+    0000  43 00 00 00 
+  forwarding to real=0x7baa198934

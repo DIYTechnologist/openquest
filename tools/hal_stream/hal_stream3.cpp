@@ -85,6 +85,19 @@ int main(int argc, char** argv) {
   cfg.bitA = 0x8000; cfg.bitB = 0x1;
   printf("eventflag fd=%d (4B, prot RW)\n", efd);
 
+  // dump OUR descriptor + FmqConfig for byte-comparison against trackingservice's
+  {
+    const uint8_t* d = (const uint8_t*)mq.getDesc();
+    uint32_t gc = *(const uint32_t*)(d + 8);
+    const native_handle_t* nh = *(const native_handle_t* const*)(d + 16);
+    uint32_t quantum = *(const uint32_t*)(d + 24), flags = *(const uint32_t*)(d + 28);
+    printf("OUR MQDescriptor: grantorCount=%u quantum=%u flags=%u nhFds=%d\n",
+           gc, quantum, flags, nh ? nh->numFds : -1);
+    const void* gb = *(void* const*)d;
+    if (gb && gc) { printf("OUR grantors:"); for (size_t i=0;i<gc*16;i++) printf("%02x%s", ((const uint8_t*)gb)[i], (i%16==15)?" | ":" "); printf("\n"); }
+    const native_handle_t* efnh = *(const native_handle_t* const*)((const uint8_t*)&cfg + 0);
+    printf("OUR FmqConfig: bitA=0x%x bitB=0x%x efFds=%d\n", cfg.bitA, cfg.bitB, efnh?efnh->numFds:-1);
+  }
   auto r1 = imu->prepareStream(*mq.getDesc(), client, cfg);
   printf("prepareStream isOk=%d desc='%s'\n", r1.isOk(), r1.isOk() ? "" : r1.description().c_str());
   // real client uses prepareStream ALONE (no streamControl). Only call it if cmd != 99.

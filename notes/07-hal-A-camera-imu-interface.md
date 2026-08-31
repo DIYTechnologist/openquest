@@ -517,3 +517,68 @@ Everything client-side is proven correct; the gap is a specific, findable HAL-si
 Nothing on the device is modified by this work — pure RE of pulled binaries. Running a client
 later means stopping `sensors@1.0-service` (or coexisting if the HAL allows multiple clients);
 `trackingservice` is only replaced at runtime, not on flash. Fully reversible.
+
+## Intercept complete — client is PROVEN correct; blocker is 100% HAL-internal (2026-08-31)
+
+Built an LD_PRELOAD interposer (`tools/imu_intercept/imu_shim.cpp`) and captured
+trackingservice's real IMU calls. Findings:
+
+- **Args byte-identical.** Our `MQDescriptor` (grantorCount=3, quantum=64, flags=1, grantor
+  bytes `00..|08..|08.. 08..`) and `FmqConfig` (bitA=0x8000, bitB=0x1, 1 ef fd) match
+  trackingservice's transaction **byte-for-byte** (see
+  `recon/imu-intercept-2026-08-31/trackingservice-prepareStream.log`).
+- **Real recipe = `prepareStream` then `streamControl(cmd=0)`.** Only one streamControl, cmd 0
+  (START). We replicate exactly.
+- **HAL calls `getSensorClientInfo` on trackingservice's clients ~8×, on ours 0×.** It simply
+  never engages our client.
+
+Every client-side variable ruled out (all give `availableToRead=0`, `infoCalls=0`):
+- threadpool serving (main-thread `joinRpcThreadpool`, `hal_stream4`)
+- caller UID (ran as uid=system via `su 1000`)
+- single-client contention (trackingservice fully stopped — still nothing)
+- EventFlag handshake (`hal_stream5`: real `EventFlag` from the shared ashmem fd, `readBlocking`,
+  proactively `wake(0x1)` space-bit) — still nothing
+- **client binder callability — DISPROVEN as the cause:** `tools/hal_stream/clienttest.cpp`
+  registers our generated `ISensorClient`, and from a *second process* `castFrom(base)` + a live
+  `getSensorClientInfo()` **round-trip succeeds** (returns name='openvr', f0=11). Our
+  `interfaceDescriptor`/`interfaceChain` are correct over real IPC. The HAL *could* call us; it
+  chooses not to. (Typed `ISensorClient::getService` returns null — a VINTF-manifest quirk,
+  irrelevant: `castFrom` is what the HAL uses and it works.)
+
+**Conclusion: the open IMU client is functionally complete and indistinguishable on the wire
+from Meta's own. The sole blocker is a gating decision inside the closed HAL's
+`SensorClientManager<ImuData>` (symbol-stripped, heavily-inlined templates) that declines to
+route IMU to our registered+started+callable client.**
+
+Live HAL instrumentation is **not viable/safe**: the HAL is a vendor binary in a restricted
+linker namespace (no `/data` preload; `/vendor` is ro), and *any* stop/kill of
+`sensors@1.0-service` triggers a restart cascade that SIGKILLs the adb shell (device-stability
+risk). The `[unrestricted]` namespace trick (run a `/data` copy of the HAL) loads the preload
+but init respawns the real HAL and the two conflict on hardware. Static RE is blocked by stripped
+vtables/inlined templates.
+
+## PIVOT: raw IMU straight from the open `oculus_syncboss` kernel driver (2026-08-31)
+
+The kernel driver `oculus_syncboss` (SPI `spi12.0`) is **open** and exposes miscfifo char devs
+(`system:system 0664`):
+- `/dev/syncboss0`, `/dev/syncboss_control0`, `/dev/syncboss_stream0`, `/dev/syncboss_powerstate0`
+- sysfs: `/sys/bus/spi/drivers/oculus_syncboss`, `/sys/class/misc/syncboss_stream0`
+
+`miscfifo` fans out packets to **every** open fd, so a second reader gets its own copy of the
+stream — **bypassing the closed HAL entirely** (this is the open-stack goal). Proven: reading
+`/dev/syncboss_stream0` as root yields live 20-byte packets, e.g.
+`01 03 00 e0 00 0e 00 | <ts32> | 00 00 00 00 | <ctr16> | 00 00 | <seq8>` with `seq` incrementing
+0x09,0x0a,… and a monotonic ~33.4k-tick timestamp delta.
+
+BUT: a fresh fd currently only receives an **always-on ~30 Hz, single-type (`01 03 00`) broadcast
+stream — NOT the 1 kHz IMU.** The nRF only streams enabled sensor types, and delivery appears
+per-fd/subscription-gated. To get IMU we must **enable it via `/dev/syncboss_control0`** (write
+the syncboss "enable sensor" command the HAL uses) and then parse IMU packets (type 0x50/80 per
+`SyncBossHAL` logs) off `syncboss_stream0`.
+
+### Next step (syncboss-direct path)
+1. RE the syncboss wire protocol: packet framing + the `syncboss_control0` enable-IMU command
+   (open kernel driver `syncboss.h` + community RE + the HAL's writes to control0).
+2. Send enable-IMU on control0, read `syncboss_stream0`, decode accel+gyro (type 0x50).
+3. Feed into Monado/Basalt. This sidesteps the HAL blocker completely and is fully reversible
+   (read-only kernel FIFO; no flash/service changes).
