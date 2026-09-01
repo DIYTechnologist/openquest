@@ -60,3 +60,7 @@ tools/cam_tap/*.so
 tools/dmabuf_read/dmabuf_read
 tools/dmabuf_read/*.gray
 tools/mempeek/mempeek
+
+# VIO dataset frames (bulky; CSVs/calib/README kept)
+exports/**/cam0/data/*.png
+tools/cam_tap/*.so
