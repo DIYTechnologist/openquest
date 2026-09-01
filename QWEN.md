@@ -701,3 +701,18 @@ never crashes TS** (validated over multiple tracking sessions; read() fires ~12x
 The asm-trampoline approach is proven safe; this is decode work, ~2-3 more short worn+moving captures.
 
 STATUS: VIO validated (0.378m trajectory, exports/vio-precise/). Atomic hook ~60% done.
+
+## RETRY SESSION 9b (Claude) — atomic hook: metadata YES, pixels NO (pool-referenced) [VERIFIED]
+- Atomic read() hook (asm trampoline) cleanly yields the OVR::FrameSet metadata: per-frame
+  exposure ts (CLOCK_MONOTONIC ns) + camId (image index 0-3), held at this[17..19] (3 mapped
+  descriptor regions, 4 image blocks each). Same data as the inner MessageQueue<FrameSet>::read.
+- **BUT pixels are NOT pointer-reachable from read()'s object graph.** Scanned this[0..90] and
+  their members (2 levels) for a member ptr referencing 640x480 image content -> only false
+  positives (small regions); the aggressive image-content scan (per-ptr sampled reads w/ SIGSEGV
+  handling) CRASHED trackingservice (process-wide signal handling across threads). Pixels live in
+  the pre-registered ImageBuffer pool, referenced by index, resolved elsewhere.
+- => The atomic hook improves camId precision but does NOT give dense pixels. Dense pixel capture
+  still needs EITHER (a) RE the ImageBuffer pool index->dmabuf resolution, OR (b) combine this
+  precise camId+ts with the poll-tap pixels via timing. The poll-tap remains the (density-limited)
+  pixel source. This is a real wall for the "one clean atomic capture" goal.
+STATUS: VIO validated (0.378m). Atomic hook = clean metadata; pixel link unsolved.
