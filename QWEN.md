@@ -639,3 +639,24 @@ packet type beyond IMU(0x50)/broadcast(0xe0):
 2. Which dmabuf = which of 4 cams (exposure/mean groups; or FrameSet camId).
 3. Decode 0x51 floats + u16 (exposure? frame-id for robust association?).
 4. Emit EuRoC-format dataset (cam0-3 + timestamps.txt, imu0.csv, calib) → run Basalt.
+
+## RETRY SESSION 7 (Claude) — FrameSet DECODED [VERIFIED-CLAUDE]
+Hooked `MessageQueue<FrameSet>::read` in trackingservice (fires during SUSTAINED tracking,
+jiffies>40) and dumped the full 984-byte HIDL FrameSet as u64 words. Layout:
+- 4 image sub-blocks, 12 words (96 B) each, at w2-13/14-25/26-37/38-49; then a trailer.
+- **w11 = exposure timestamp in ns (CLOCK_MONOTONIC domain), SAME value across all 4 images**
+  (hardware-synced). Verified: delta between framesets (140.5M ns) matches the ~136 ms frame
+  spacing. This is the PRECISE per-exposure timestamp — and it's the same clock as the pixel
+  tap's `mono_ns`, so frames can be assigned exact exposure times with no cross-clock offset.
+- w13 (per block) = per-image timestamp; w2 lo32 = image index 0-3 = **camId**; w3 = frameset
+  type (2/4); w9/w10 = doubles (exposure/gain). NO buffer pointers in the struct — buffers are
+  referenced by index into the pre-shared pool (FMQ can't pass fds).
+- FrameSet reads are IRREGULAR/batched (host deltas 13-40 ms), not clean 30 Hz.
+
+### Remaining to a converging dataset
+Link w11 (precise exposure ts + camId) to the pixel dmabufs. Cleanest: hook the OUTER
+`DualStreamHandle<FrameSet>::read()` (returns OVR::Sensors::FrameSet with RESOLVED ImageBuffers →
+pixel access) so ts+camId+pixels come together; OR a combined capture (FrameSet + pixel tap, both
+mono_ns) and match by host time (now single-clock, tighter than the earlier nRF-vs-host matching).
+This precise timestamp is exactly what the stereo Basalt run needed (the ~10 ms poll jitter was
+the blocker).
