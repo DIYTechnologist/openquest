@@ -67,3 +67,6 @@ tools/cam_tap/*.so
 
 exports/**/cam1/data/*.png
 exports/vio-stereo*/**/*.png
+
+exports/vio-precise/**/*.png
+exports/vio-precise/**/*.pgm

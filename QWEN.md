@@ -660,3 +660,21 @@ pixel access) so ts+camId+pixels come together; OR a combined capture (FrameSet 
 mono_ns) and match by host time (now single-clock, tighter than the earlier nRF-vs-host matching).
 This precise timestamp is exactly what the stereo Basalt run needed (the ~10 ms poll jitter was
 the blocker).
+
+## RETRY SESSION 8 (Claude) — VIO TRACKS ✅ [VERIFIED-CLAUDE]
+Combined tap v6 (tools/cam_tap/img_shim.c): pixel scanner + FrameSet w11 hook + syncboss reader,
+all CLOCK_MONOTONIC, GO-triggered. Captured pixels + w11 (mono exposure ts) + IMU/exposures (nrf).
+- **Clock map (RANSAC value-match of w11<->0x51): mono_ns = 982.343*nrf_us + 4.296e13, residual
+  0.23 ms (max 0.36 ms).** Sub-ms link between the camera (mono) and IMU (nRF) clocks.
+- Built precise stereo dataset (exports/vio-precise): cam ts = w11 (mono); IMU = 0x50 converted
+  nrf->mono; common clock; deduped over-captured address-groups to one-frame-per-w11.
+- **Basalt basalt_vio (stereo-inertial) NOW TRACKS: 41 non-zero poses, NO NaN, path 0.378 m over
+  0.9 s (bbox 23x28x6 cm = real head motion).** vs earlier jittery data -> NaN / all-zeros.
+- => The ~10 ms poll-tap timestamp jitter was the convergence blocker; precise w11 + clock map
+  (sub-ms) fixes it. FULL PIPELINE VALIDATED end-to-end: open IMU + open cameras -> hardware sync
+  -> precise timestamps -> Basalt VIO trajectory.
+
+Limit: only 45 pairs / 0.9 s (short sustained-tracking window + unstable dmabuf address-grouping
+overlap). Longer sustained motion + a stable camera-id source (outer DualStreamHandle::read hook
+giving atomic ts+camId+pixels) -> a full-length trajectory. Tooling (dataset builder, clock map,
+Basalt docker) all in place to consume a bigger capture.
