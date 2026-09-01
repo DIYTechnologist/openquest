@@ -64,3 +64,6 @@ tools/mempeek/mempeek
 # VIO dataset frames (bulky; CSVs/calib/README kept)
 exports/**/cam0/data/*.png
 tools/cam_tap/*.so
+
+exports/**/cam1/data/*.png
+exports/vio-stereo*/**/*.png
