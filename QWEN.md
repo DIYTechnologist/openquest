@@ -678,3 +678,26 @@ Limit: only 45 pairs / 0.9 s (short sustained-tracking window + unstable dmabuf 
 overlap). Longer sustained motion + a stable camera-id source (outer DualStreamHandle::read hook
 giving atomic ts+camId+pixels) -> a full-length trajectory. Tooling (dataset builder, clock map,
 Basalt docker) all in place to consume a bigger capture.
+
+## RETRY SESSION 9 (Claude) — ATOMIC HOOK progress [VERIFIED-CLAUDE]
+Built `tools/cam_tap/fs_atomic.c`: asm trampoline that interposes the sret-returning
+`DualStreamHandle<FrameSet>::read()` (mangled `_ZN3OVR7Sensors11HidlWrapper16DualStreamHandle...4readEv`),
+calls the real via GOT (`adrp :got:g_real`), dumps state, returns cleanly. **Trampoline works,
+never crashes TS** (validated over multiple tracking sessions; read() fires ~12x per active burst).
+- **read() returns a STATUS in x0/x1 = {1, 10}**, NOT the FrameSet (frame data is in the
+  DualStreamHandle `this` object, not the return). read() only fires during ACTIVE tracking
+  (sustained head motion).
+- **Frame metadata found at `this[17],this[18],this[19]`** (3 mapped ~4KB regions ~0x1000-0x2000
+  apart) containing `{0,0, ctrA, ctrB, 640,480,640,640(stride), 1, 0..., <tail32>}` where
+  (ctrA,ctrB)=(6,4)/(5,2) per frame (frame#/camId?), tail32 changes per frame (ts/checksum?).
+  These are per-frame descriptors, NOT the pixel buffers (too small; pixels referenced elsewhere).
+- ImageBuffer is NON-polymorphic (no vtable) → can't ID by vtable; ID frame objects by 640x480.
+- `this[+0xc0]` = config/strings (not frames). `this[30..39]` = another pointer array (0xe0 stride).
+
+### Remaining (needs more capture iterations)
+1. Trace the metadata descriptor -> pixel dmabuf (find the buffer fd/ptr/handle it references).
+2. Pin exact timestamp field (correlate tail32 or a nearby qword with syncboss nrf/w11).
+3. Confirm camId field. Then extract {ts, camId, pixels} atomically per frame -> dense dataset.
+The asm-trampoline approach is proven safe; this is decode work, ~2-3 more short worn+moving captures.
+
+STATUS: VIO validated (0.378m trajectory, exports/vio-precise/). Atomic hook ~60% done.
