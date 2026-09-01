@@ -32,6 +32,7 @@
     480
    ]
   ],
+  "vignette": [],
   "calib_accel_bias": [
    0.0,
    0.0,
@@ -78,7 +79,26 @@
    0.0001,
    0.0001
   ],
-  "cam_time_offset_ns": 0,
-  "_comment": "ICM-20602 mono-inertial; cam0 KB4 approx of Fisheye62; physical camera id of the captured stream is UNVERIFIED (used cam0 extrinsics as first approx). Hardware-synced ts."
+  "T_mocap_world": {
+   "px": 0.0,
+   "py": 0.0,
+   "pz": 0.0,
+   "qx": 0.0,
+   "qy": 0.0,
+   "qz": 0.0,
+   "qw": 1.0
+  },
+  "T_imu_marker": {
+   "px": 0.0,
+   "py": 0.0,
+   "pz": 0.0,
+   "qx": 0.0,
+   "qy": 0.0,
+   "qz": 0.0,
+   "qw": 1.0
+  },
+  "mocap_time_offset_ns": 0,
+  "mocap_to_imu_offset_ns": 0,
+  "cam_time_offset_ns": 0
  }
 }

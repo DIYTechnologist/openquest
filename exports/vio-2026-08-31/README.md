@@ -16,3 +16,17 @@ syncboss kernel FIFO for hardware-synced timestamps. EuRoC/Basalt layout.
 - Physical camera identity of the captured stream is UNVERIFIED (calib uses cam0 as first approx;
   may need cam1/2/3 extrinsics).
 - Bring-up artifact (leeches Meta's trackingservice), not a blob-free capture.
+
+## Basalt run result (2026-09-01)
+Built Basalt from source (tools/basalt-docker/, pre-vcpkg commit + modern cmake) and ran
+`basalt_vio` mono-inertial on this dataset. Outcome: **loads + runs end-to-end but produces
+0 poses** — Basalt's keypoint VIO triangulates its landmark map FROM STEREO
+(keypoint_vio.cpp:303 "Triangulate new points from stereo"), so a single camera never builds a
+map and the estimator never initializes. **Basalt is stereo-inertial; this dataset is mono.**
+
+To actually track with Basalt we need a STEREO pair: two of the 4 (hardware-synced) tracking
+cams with known baseline (from the factory calib) + clean per-frame association for both.
+Alternatively use a mono-capable estimator (OpenVINS / VINS-Mono).
+
+Pipeline proven working: sensor capture (open) -> hardware-synced timestamps -> EuRoC dataset ->
+Basalt loads calib+images+imu and runs. The gap is data (mono + best-effort assoc), not plumbing.
