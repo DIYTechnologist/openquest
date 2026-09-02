@@ -21,6 +21,18 @@ W, H_FULL, H = 640, 481, 480
 META_ROWS = 1                          # skip this many leading rows
 BRIGHT_MIN = 20.0                     # mean intensity separating SLAM from controller frames
 IMU_LEAD_NS = 500_000_000             # require this much IMU history before the first frame
+# The nRF clock starts near zero, so raw timestamps span 1e9..2.5e10 ns and change digit COUNT
+# mid-dataset (1000178000 -> 10000088000). Frame files are named by timestamp, so any consumer
+# that sorts lexicographically would order the sequence wrongly. Shift everything by a constant
+# so all timestamps are the same width (the known-good EuRoC datasets are uniformly 14-15 digits).
+# Relative timing is untouched.
+TIME_BASE_NS = 100_000_000_000_000
+# Camera->IMU time offset, determined empirically by cross-correlating optical-flow magnitude
+# against gyro magnitude (tools/vio/cam_imu_lag.py): correlation rises from 0.38 at zero lag to
+# 0.95 at +816 ms. So the 0xe0 exposure stamps and the 0x50 IMU stamps do NOT share an epoch,
+# despite both being u32 microsecond fields in the same syncboss stream. This offset is ~24.5
+# frame periods, which is why the earlier +/-2 frame sweeps could never find it.
+CAM_SHIFT_NS = int(os.environ.get('CAM_SHIFT_MS', '816')) * 1_000_000
 G, DEG = 9.80665, math.pi / 180.0
 
 
@@ -186,7 +198,7 @@ def main(cap, out):
     # exports/vio-precise dataset happened to have 6.2 s of IMU lead.)
     # snap each frame to the nearest exposure packet (KOFF shifts the frame<->strobe pairing)
     KOFF = int(os.environ.get('KOFF', '0'))
-    exp_ns = [t * 1000 for t in exp_us]
+    exp_ns = [t * 1000 + TIME_BASE_NS + CAM_SHIFT_NS for t in exp_us]
     def snap(ts_mono):
         nrf_est = (ts_mono - b) / a
         j = bisect.bisect_left(exp_us, nrf_est)
@@ -219,7 +231,7 @@ def main(cap, out):
         snapped[c] = uniq
     per_cam.update(snapped)
     # Basalt needs IMU history covering the first frame; the strobe starts before the IMU stream.
-    cut = imu_us[0] * 1000 + IMU_LEAD_NS
+    cut = imu_us[0] * 1000 + TIME_BASE_NS + IMU_LEAD_NS
     before = len(per_cam[cams[0]])
     for c in cams[:2]:
         per_cam[c] = [(t, p_) for t, p_ in per_cam[c] if t >= cut]
@@ -242,7 +254,7 @@ def main(cap, out):
         f.write('#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z\n')
         for us, g, acc in zip(imu_us, [s[1] for s in imu], [s[2] for s in imu]):
             f.write('%d,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n'
-                    % (us * 1000, g[0], g[1], g[2], acc[0], acc[1], acc[2]))
+                    % (us * 1000 + TIME_BASE_NS, g[0], g[1], g[2], acc[0], acc[1], acc[2]))
     print(f"wrote imu0 ({len(imu_us)} samples)")
     return 0
 

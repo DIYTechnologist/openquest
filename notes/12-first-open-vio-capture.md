@@ -98,3 +98,71 @@ never tracks in this build, so that flag proves nothing.
 All of this is host-side analysis of already-captured data. The only device interaction was the
 capture itself, which restored `trackingservice`, the framework and SELinux Enforcing on exit
 (verified). Nothing was flashed.
+
+---
+
+## Session 2 (2026-09-02): deeper diagnosis. Two real discoveries; Basalt still not converging.
+
+### NEW TOOL: `tools/vio/epipolar_check.py`
+Matches SIFT features between two simultaneous frames, unprojects through KB4, and scores every
+ordered factory camera pair by epipolar error. Answers "are these images geometrically consistent
+with the calibration, and which physical pair are they?" without needing the device.
+
+**Result on our capture: pair (0,2), median epipolar error 0.173°, 362/407 inliers** — an order of
+magnitude better than any other pairing. So our v4l2 indices *are* factory cameras 0 and 2, the
+factory extrinsics are accurate for our images, and the pair is richly matchable.
+
+Run on the known-good `exports/vio-precise` control for comparison: its images are physically
+**(2,0)** — the reverse order — at a much poorer 2.04° / 134 of 635 inliers. Worth knowing: the
+control converges despite a far worse geometric fit than ours.
+
+### KEY DISCOVERY: an ~816 ms camera↔IMU time offset
+Cross-correlating optical-flow magnitude (KLT, converted to rad/s via the 190 px/rad focal)
+against gyro magnitude:
+
+| lag | correlation |
+|---|---|
+| 0 ms | 0.380 |
+| **816 ms** | **0.946** |
+
+So **the 0xe0 exposure timestamps and the 0x50 IMU timestamps do NOT share an epoch**, despite
+both being u32-microsecond fields in the same syncboss stream. The offset is ~24.5 frame periods,
+which is why the earlier ±2-frame and ±3-frame sweeps could never have found it. `CAM_SHIFT_MS`
+(default 816) now corrects it in the builder; after correction the residual lag is −20 ms at
+correlation 0.946.
+
+**Tool change for the next capture:** `cam_direct` now writes `syncboss_chunks.csv` —
+a CLOCK_MONOTONIC stamp against the byte offset of every read of the syncboss stream. That lets
+the nRF↔monotonic map be fitted *directly* rather than inferred by pairing two uniform 30 Hz
+sequences (which is degenerate under integer frame shifts). This removes the guesswork at source.
+
+### Also verified clean this session
+- **My PNG writer**: re-encoded the control's images with it — control still converges
+  (42 poses, 0.3776 m). Encoder exonerated.
+- **Feature quality**: our frames are *better* than the control — mean |grad| 6.73 vs 4.36,
+  corner strength 26182 vs 7361, and KLT track survival 1.00 vs 0.91.
+- **Optical flow agrees with the gyro** across the capture once the 816 ms offset is applied.
+
+### Additionally eliminated
+all 12 ordered camera pairs **with IMU enabled** (the earlier sweep used `--use-imu 0` and was
+therefore meaningless); IMU sign/order conventions (negated gyro, negated accel, swapped groups);
+leading all-zero-gyro rows; uniform-width timestamps (raw nRF stamps crossed a digit-count
+boundary, which would break any lexicographic consumer — fixed via `TIME_BASE_NS` regardless);
+dataset size (45-frame subset matching the control); all three alternative Basalt configs;
+and the control's (2,0) camera ordering convention.
+
+### Where this leaves it
+Every input has now been independently validated — images, geometry, calibration, IMU values,
+IMU/camera time alignment, PNG encoding, timestamps, and the Basalt invocation itself (which
+reproduces the control exactly). Basalt nevertheless NaNs on the first optimisation step.
+
+**Next, in order:**
+1. **Get observability.** The container only builds `basalt_vio`; add `basalt_opt_flow` (or a
+   debug build with keypoint/observation counts) so we can see whether the front end produces
+   observations at all. Everything so far has been inferred from a single NaN message. The GUI
+   path is blocked headless by GNOME/XWayland auth — a screenshot-capable X session or an extra
+   build target is the way through.
+2. **Cross-check with a second VIO** (OpenVINS or Kimera) on the same EuRoC dataset. If another
+   estimator converges, the fault is Basalt-specific configuration rather than our data.
+3. **New capture using `syncboss_chunks.csv`** to build the clock map directly, and framed on a
+   textured wall ~2 m away with slow translation and no hands/body in frame.

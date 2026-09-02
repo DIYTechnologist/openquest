@@ -601,14 +601,29 @@ static int stage_all(void *hal, int n, int rounds) {
 // the syncboss stream raw and let tools/vio/sb_decode.py do the decode host-side.
 static volatile int g_imu_run = 1;
 
+// Also log a CLOCK_MONOTONIC stamp against the byte offset of every read. Analysis of the first
+// capture showed the 0xe0 exposure stamps and the 0x50 IMU stamps do NOT share an epoch (an ~816
+// ms offset, found only by cross-correlating optical flow against gyro), so pairing them is not
+// safe. With (host_time, byte_offset) pairs the nRF->monotonic map can be fitted directly and
+// unambiguously, and every packet's host arrival time is bounded by its enclosing chunk.
 static void *imu_thread(void *arg) {
   int out = *(int *)arg;
   unsigned char buf[65536];
+  FILE *idx = fopen(OUTDIR "/syncboss_chunks.csv", "w");
+  if (idx) fprintf(idx, "#host_mono_ns,byte_offset,bytes\n");
+  uint64_t off = 0;
   while (g_imu_run) {
     ssize_t n = read(sb_stream_fd, buf, sizeof buf);
-    if (n > 0) { if (write(out, buf, n) < 0) break; }
-    else usleep(500);
+    if (n > 0) {
+      uint64_t t = mono_ns();
+      if (write(out, buf, n) < 0) break;
+      if (idx) fprintf(idx, "%llu,%llu,%zd\n", (unsigned long long)t, (unsigned long long)off, n);
+      off += (uint64_t)n;
+    } else {
+      usleep(500);
+    }
   }
+  if (idx) fclose(idx);
   return NULL;
 }
 
