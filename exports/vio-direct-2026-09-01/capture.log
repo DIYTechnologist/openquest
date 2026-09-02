@@ -1,0 +1,107 @@
+=== START Tue Sep  1 20:36:19 BST 2026 ===
+--- pre-state
+running
+running
+Enforcing
+--- stopping consumers of the camera pipeline
+trackingservice pids: 27102 
+sensors-hal pids:     27052 
+
+########## STAGE 1: enum
+cam_direct — B1 bring-up (stage=enum cam=0)
+[+] dlopen /system/vendor/lib64/libqcameraoculushal.so -> 0x5afff9bb8c9a1f89
+[+] all 14 qcamera_* symbols resolved
+
+=== STAGE 1: enumerate ===
+Failed to open camera config node, status: 0, error: Device or resource busy
+Aborted 
+exit=134
+
+########## STAGE 2: start sensor 0
+cam_direct — B1 bring-up (stage=start cam=0)
+[+] dlopen /system/vendor/lib64/libqcameraoculushal.so -> 0x73347cfca012df35
+[+] all 14 qcamera_* symbols resolved
+
+=== STAGE 1: enumerate ===
+Failed to open camera config node, status: 0, error: Device or resource busy
+Aborted 
+exit=134
+
+########## STAGE 3: stream 10 frames from sensor 0
+cam_direct — B1 bring-up (stage=stream cam=0)
+[+] dlopen /system/vendor/lib64/libqcameraoculushal.so -> 0x2bd1a3f80aa839ad
+[+] all 14 qcamera_* symbols resolved
+
+=== STAGE 1: enumerate ===
+Failed to open camera config node, status: 0, error: Device or resource busy
+Aborted 
+exit=134
+
+########## VENDOR LOGCAT
+09-01 20:36:25.256 27121 27121 F QCameraDriver: Failed to open camera config node, status: 0, error: Device or resource busy
+09-01 20:36:25.314 27130 27130 F DEBUG   : Abort message: 'Failed to open camera config node, status: 0, error: Device or resource busy'
+09-01 20:36:25.317 27130 27130 F DEBUG   :       #03 pc 0000000000009934  /system/vendor/lib64/libqcameradriver.so (control_init+1964) (BuildId: b983c59c6dfaec917c47022cb42c6130)
+09-01 20:36:25.317 27130 27130 F DEBUG   :       #04 pc 0000000000003adc  /system/vendor/lib64/libqcameraoculushal.so (qcamera_open+64) (BuildId: da1dcfac7fc35c9683fc6e09b9403cf8)
+09-01 20:36:25.362 27103 27108 D HighFrequencyOcal: Registering sensor group: 0, description: SLAM cameras and IMU, disk file: online_calibration.json
+09-01 20:36:25.363 27133 27133 I QCameraDriver: 4 cameras reported by driver
+09-01 20:36:25.363 27133 27133 D QCameraDriver: Done discovering media devices
+09-01 20:36:25.363 27133 27133 I QCameraDriver: dev_info[id=0,name='video3']
+09-01 20:36:25.363 27133 27133 I QCameraDriver: dev_info[id=1,name='video4']
+09-01 20:36:25.363 27133 27133 I QCameraDriver: dev_info[id=2,name='video5']
+09-01 20:36:25.363 27133 27133 I QCameraDriver: dev_info[id=3,name='video6']
+09-01 20:36:25.363 27133 27133 W QCameraDriver: Maximum number of camera reached 4
+09-01 20:36:25.363 27133 27133 I QCameraDriver: num_cameras=4
+09-01 20:36:25.363 27133 27133 I QCameraDriver: Camera 0: video3, session id is: 3
+09-01 20:36:25.363 27133 27133 I QCameraDriver: Camera 1: video4, session id is: 4
+09-01 20:36:25.363 27133 27133 I QCameraDriver: Camera 2: video5, session id is: 5
+09-01 20:36:25.363 27133 27133 I QCameraDriver: Camera 3: video6, session id is: 6
+09-01 20:36:25.364 27133 27133 E QCameraDriver: open(/dev/video0) failed
+09-01 20:36:25.364 27133 27133 F QCameraDriver: Failed to open camera config node, status: 0, error: Device or resource busy
+09-01 20:36:25.414 27143 27143 F DEBUG   : Abort message: 'Failed to open camera config node, status: 0, error: Device or resource busy'
+09-01 20:36:25.418 27143 27143 F DEBUG   :       #03 pc 0000000000009934  /system/vendor/lib64/libqcameradriver.so (control_init+1964) (BuildId: b983c59c6dfaec917c47022cb42c6130)
+09-01 20:36:25.418 27143 27143 F DEBUG   :       #04 pc 0000000000003adc  /system/vendor/lib64/libqcameraoculushal.so (qcamera_open+64) (BuildId: da1dcfac7fc35c9683fc6e09b9403cf8)
+09-01 20:36:25.450 27146 27146 I QCameraDriver: 4 cameras reported by driver
+09-01 20:36:25.450 27146 27146 D QCameraDriver: Done discovering media devices
+09-01 20:36:25.450 27146 27146 I QCameraDriver: dev_info[id=0,name='video3']
+09-01 20:36:25.450 27146 27146 I QCameraDriver: dev_info[id=1,name='video4']
+09-01 20:36:25.450 27146 27146 I QCameraDriver: dev_info[id=2,name='video5']
+09-01 20:36:25.450 27146 27146 I QCameraDriver: dev_info[id=3,name='video6']
+09-01 20:36:25.450 27146 27146 W QCameraDriver: Maximum number of camera reached 4
+09-01 20:36:25.450 27146 27146 I QCameraDriver: num_cameras=4
+09-01 20:36:25.450 27146 27146 I QCameraDriver: Camera 0: video3, session id is: 3
+09-01 20:36:25.450 27146 27146 I QCameraDriver: Camera 1: video4, session id is: 4
+09-01 20:36:25.450 27146 27146 I QCameraDriver: Camera 2: video5, session id is: 5
+09-01 20:36:25.450 27146 27146 I QCameraDriver: Camera 3: video6, session id is: 6
+09-01 20:36:25.451 27146 27146 E QCameraDriver: open(/dev/video0) failed
+09-01 20:36:25.452 27146 27146 F QCameraDriver: Failed to open camera config node, status: 0, error: Device or resource busy
+09-01 20:36:25.487 27104 27104 I [CT]    : MIXEDREALITY: ServiceLogic: manageCameraAndStereoPipelineStatus: OFF, shutting down cameras and stereopipeline.
+09-01 20:36:25.498 27157 27157 F DEBUG   : Abort message: 'Failed to open camera config node, status: 0, error: Device or resource busy'
+09-01 20:36:25.501 27157 27157 F DEBUG   :       #03 pc 0000000000009934  /system/vendor/lib64/libqcameradriver.so (control_init+1964) (BuildId: b983c59c6dfaec917c47022cb42c6130)
+09-01 20:36:25.501 27157 27157 F DEBUG   :       #04 pc 0000000000003adc  /system/vendor/lib64/libqcameraoculushal.so (qcamera_open+64) (BuildId: da1dcfac7fc35c9683fc6e09b9403cf8)
+09-01 20:36:25.543 27102 27102 D CameraMuxModeMonitor: Connecting to 'cameramuxmodeservice'
+09-01 20:36:25.544 27102 27102 D CameraMuxModeMonitor: Connected to 'cameramuxmodeservice'
+09-01 20:36:25.697 27102 27102 I [CT]    : VisionInterface: Registering Camera id: 0 for index: 0. PixelType = 1 width = 640 height = 480. 
+09-01 20:36:25.697 27102 27102 I [CT]    :  - T_cameraFromDevice: so3[-1.926950 -1.799960 0.839433] r3[-0.014573 0.041810 -0.087427]
+09-01 20:36:25.697 27102 27102 I [CT]    : VisionInterface: Registering Camera id: 1 for index: 1. PixelType = 1 width = 640 height = 480. 
+09-01 20:36:25.697 27102 27102 I [CT]    :  - T_cameraFromDevice: so3[2.439240 0.449576 -0.862339] r3[0.006564 -0.002787 -0.106446]
+09-01 20:36:25.698 27102 27102 I [CT]    : VisionInterface: Registering Camera id: 2 for index: 2. PixelType = 1 width = 640 height = 480. 
+09-01 20:36:25.698 27102 27102 I [CT]    :  - T_cameraFromDevice: so3[-1.701440 -1.811930 0.491780] r3[-0.015129 -0.041327 -0.087572]
+09-01 20:36:25.698 27102 27102 I [CT]    : VisionInterface: Registering Camera id: 3 for index: 3. PixelType = 1 width = 640 height = 480. 
+09-01 20:36:25.698 27102 27102 I [CT]    :  - T_cameraFromDevice: so3[-0.430574 -2.363350 -0.677673] r3[0.006819 0.004304 -0.106348]
+09-01 20:36:25.699 27102 27102 I [CT]    : VIPER: Stereo overlap between cameras 0 and 2
+09-01 20:36:25.703 27102 27102 I [CT]    : VisionInterface: Registering Camera id: 0 for index: 0. PixelType = 1 width = 640 height = 480. 
+09-01 20:36:25.703 27102 27102 I [CT]    :  - T_cameraFromDevice: so3[-1.926950 -1.799960 0.839433] r3[-0.014573 0.041810 -0.087427]
+09-01 20:36:25.703 27102 27102 I [CT]    : VisionInterface: Registering Camera id: 1 for index: 1. PixelType = 1 width = 640 height = 480. 
+09-01 20:36:25.703 27102 27102 I [CT]    :  - T_cameraFromDevice: so3[2.439240 0.449576 -0.862339] r3[0.006564 -0.002787 -0.106446]
+09-01 20:36:25.703 27102 27102 I [CT]    : VisionInterface: Registering Camera id: 2 for index: 2. PixelType = 1 width = 640 height = 480. 
+09-01 20:36:25.703 27102 27102 I [CT]    :  - T_cameraFromDevice: so3[-1.701440 -1.811930 0.491780] r3[-0.015129 -0.041327 -0.087572]
+09-01 20:36:25.703 27102 27102 I [CT]    : VisionInterface: Registering Camera id: 3 for index: 3. PixelType = 1 width = 640 height = 480. 
+09-01 20:36:25.703 27102 27102 I [CT]    :  - T_cameraFromDevice: so3[-0.430574 -2.363350 -0.677673] r3[0.006819 0.004304 -0.106348]
+09-01 20:36:25.704 27102 27102 I [CT]    : VIPER: Stereo overlap between cameras 0 and 2
+
+########## RESTORE
+--- post-state
+running
+running
+Enforcing
+=== DONE Tue Sep  1 20:36:33 BST 2026 ===

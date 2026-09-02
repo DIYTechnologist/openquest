@@ -1,0 +1,585 @@
+=== START Tue Sep  1 22:52:16 BST 2026 ===
+pre: tracking=running hal=running enforce=Enforcing
+--- stopping trackingservice + framework + sensors HAL
+--- polling for the HAL to stay down (20s)
+t=0s hal_state=stopped hal_pid=''
+--- HAL is down; /dev/video0 should be free
+
+########## STAGE 1: enum
+cam_direct — B1 bring-up (stage=enum cam=0)
+[+] dlopen /system/vendor/lib64/libqcameraoculushal.so -> 0x10acb7aed0b162c1
+[+] all 14 qcamera_* symbols resolved
+
+=== STAGE 1: enumerate ===
+[+] qcamera_open(0) -> 0x7cce60a000
+hal context (0x7cce60a000, 112 bytes):
+  +0x00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 10 40 61 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |.@a.|...........|
+  +0x40 00 00 00 00 00 00 00 00 04 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w6  +0x30 = 0x0000007cce614010  (536038424592)
+  w9  +0x48 = 0x0000000000000004  (4)
+[+] qcamera_num_sensors() = 4  (expect 4)
+
+[+] qcamera_get_sensor(hal, 0) -> 0x7cce604400
+sensor object (0x7cce604400, 128 bytes):
+  +0x00 00 a0 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |..`.|...........|
+  +0x10 00 00 00 00 00 00 00 00 90 00 60 ce 7c 00 00 00  |..........`.|...|
+  +0x20 c0 00 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |..`.|...........|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x70 00 44 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |.D`.|...........|
+  w0  +0x00 = 0x0000007cce60a000  (536038383616)
+  w3  +0x18 = 0x0000007cce600090  (536038342800)
+  w4  +0x20 = 0x0000007cce6000c0  (536038342848)
+  w14 +0x70 = 0x0000007cce604400  (536038360064)
+  qcamera_get_sensor_dim -> 0x7cce604410  {w=0 h=0}
+  sensor+0x18 (capability?) = 0x7cce600090
+  capability (0x7cce600090, 96 bytes):
+  +0x00 00 80 0c cf 7c 00 00 00 00 10 00 00 00 00 00 00  |....|...........|
+  +0x10 0a 00 00 00 00 00 00 00 10 40 61 ce 7c 00 00 00  |.........@a.|...|
+  +0x20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 70 0c cf 7c 00 00 00 00 10 00 00 00 00 00 00  |.p..|...........|
+  +0x40 0b 00 00 00 00 00 00 00 10 40 61 ce 7c 00 00 00  |.........@a.|...|
+  +0x50 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x0000007ccf0c8000  (536049647616)
+  w1  +0x08 = 0x0000000000001000  (4096)
+  w2  +0x10 = 0x000000000000000a  (10)
+  w3  +0x18 = 0x0000007cce614010  (536038424592)
+  w4  +0x20 = 0x0000000000000001  (1)
+  w6  +0x30 = 0x0000007ccf0c7000  (536049643520)
+  w7  +0x38 = 0x0000000000001000  (4096)
+  w8  +0x40 = 0x000000000000000b  (11)
+  w9  +0x48 = 0x0000007cce614010  (536038424592)
+  w10 +0x50 = 0x0000000000000002  (2)
+  qcamera_query_sensor_info rc=0
+  sensor info (0x7fccea6940, 64 bytes):
+  +0x00 80 02 00 00 e0 01 00 00 70 00 00 00 08 00 00 00  |........p.......|
+  +0x10 00 00 00 00 08 00 00 00 01 00 00 00 01 00 00 00  |................|
+  +0x20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x000001e000000280  (2061584302720)
+  w1  +0x08 = 0x0000000800000070  (34359738480)
+  w2  +0x10 = 0x0000000800000000  (34359738368)
+  w3  +0x18 = 0x0000000100000001  (4294967297)
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=1) rc=-857054416 -> 640x481
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=0) rc=-857054416 -> 640x480
+  qcamera_release_sensor rc=-832536576
+
+[+] qcamera_get_sensor(hal, 1) -> 0x7cce604400
+sensor object (0x7cce604400, 128 bytes):
+  +0x00 00 a0 60 ce 7c 00 00 00 01 00 00 00 00 00 00 00  |..`.|...........|
+  +0x10 00 00 00 00 00 00 00 00 90 00 60 ce 7c 00 00 00  |..........`.|...|
+  +0x20 c0 00 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |..`.|...........|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x70 00 44 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |.D`.|...........|
+  w0  +0x00 = 0x0000007cce60a000  (536038383616)
+  w1  +0x08 = 0x0000000000000001  (1)
+  w3  +0x18 = 0x0000007cce600090  (536038342800)
+  w4  +0x20 = 0x0000007cce6000c0  (536038342848)
+  w14 +0x70 = 0x0000007cce604400  (536038360064)
+  qcamera_get_sensor_dim -> 0x7cce604410  {w=0 h=0}
+  sensor+0x18 (capability?) = 0x7cce600090
+  capability (0x7cce600090, 96 bytes):
+  +0x00 00 80 0c cf 7c 00 00 00 00 10 00 00 00 00 00 00  |....|...........|
+  +0x10 0a 00 00 00 00 00 00 00 10 40 61 ce 7c 00 00 00  |.........@a.|...|
+  +0x20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 70 0c cf 7c 00 00 00 00 10 00 00 00 00 00 00  |.p..|...........|
+  +0x40 0b 00 00 00 00 00 00 00 10 40 61 ce 7c 00 00 00  |.........@a.|...|
+  +0x50 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x0000007ccf0c8000  (536049647616)
+  w1  +0x08 = 0x0000000000001000  (4096)
+  w2  +0x10 = 0x000000000000000a  (10)
+  w3  +0x18 = 0x0000007cce614010  (536038424592)
+  w4  +0x20 = 0x0000000000000001  (1)
+  w6  +0x30 = 0x0000007ccf0c7000  (536049643520)
+  w7  +0x38 = 0x0000000000001000  (4096)
+  w8  +0x40 = 0x000000000000000b  (11)
+  w9  +0x48 = 0x0000007cce614010  (536038424592)
+  w10 +0x50 = 0x0000000000000002  (2)
+  qcamera_query_sensor_info rc=0
+  sensor info (0x7fccea6940, 64 bytes):
+  +0x00 80 02 00 00 e0 01 00 00 70 00 00 00 08 00 00 00  |........p.......|
+  +0x10 00 00 00 00 08 00 00 00 01 00 00 00 01 00 00 00  |................|
+  +0x20 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x000001e000000280  (2061584302720)
+  w1  +0x08 = 0x0000000800000070  (34359738480)
+  w2  +0x10 = 0x0000000800000000  (34359738368)
+  w3  +0x18 = 0x0000000100000001  (4294967297)
+  w4  +0x20 = 0x0000000100000000  (4294967296)
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=1) rc=-857054416 -> 640x481
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=0) rc=-857054416 -> 640x480
+  qcamera_release_sensor rc=-832536576
+
+[+] qcamera_get_sensor(hal, 2) -> 0x7cce604400
+sensor object (0x7cce604400, 128 bytes):
+  +0x00 00 a0 60 ce 7c 00 00 00 02 00 00 00 00 00 00 00  |..`.|...........|
+  +0x10 00 00 00 00 00 00 00 00 90 00 60 ce 7c 00 00 00  |..........`.|...|
+  +0x20 c0 00 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |..`.|...........|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x70 00 44 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |.D`.|...........|
+  w0  +0x00 = 0x0000007cce60a000  (536038383616)
+  w1  +0x08 = 0x0000000000000002  (2)
+  w3  +0x18 = 0x0000007cce600090  (536038342800)
+  w4  +0x20 = 0x0000007cce6000c0  (536038342848)
+  w14 +0x70 = 0x0000007cce604400  (536038360064)
+  qcamera_get_sensor_dim -> 0x7cce604410  {w=0 h=0}
+  sensor+0x18 (capability?) = 0x7cce600090
+  capability (0x7cce600090, 96 bytes):
+  +0x00 00 80 0c cf 7c 00 00 00 00 10 00 00 00 00 00 00  |....|...........|
+  +0x10 0a 00 00 00 00 00 00 00 10 40 61 ce 7c 00 00 00  |.........@a.|...|
+  +0x20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 70 0c cf 7c 00 00 00 00 10 00 00 00 00 00 00  |.p..|...........|
+  +0x40 0b 00 00 00 00 00 00 00 10 40 61 ce 7c 00 00 00  |.........@a.|...|
+  +0x50 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x0000007ccf0c8000  (536049647616)
+  w1  +0x08 = 0x0000000000001000  (4096)
+  w2  +0x10 = 0x000000000000000a  (10)
+  w3  +0x18 = 0x0000007cce614010  (536038424592)
+  w4  +0x20 = 0x0000000000000001  (1)
+  w6  +0x30 = 0x0000007ccf0c7000  (536049643520)
+  w7  +0x38 = 0x0000000000001000  (4096)
+  w8  +0x40 = 0x000000000000000b  (11)
+  w9  +0x48 = 0x0000007cce614010  (536038424592)
+  w10 +0x50 = 0x0000000000000002  (2)
+  qcamera_query_sensor_info rc=0
+  sensor info (0x7fccea6940, 64 bytes):
+  +0x00 80 02 00 00 e0 01 00 00 70 00 00 00 08 00 00 00  |........p.......|
+  +0x10 00 00 00 00 08 00 00 00 01 00 00 00 01 00 00 00  |................|
+  +0x20 00 00 00 00 02 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x000001e000000280  (2061584302720)
+  w1  +0x08 = 0x0000000800000070  (34359738480)
+  w2  +0x10 = 0x0000000800000000  (34359738368)
+  w3  +0x18 = 0x0000000100000001  (4294967297)
+  w4  +0x20 = 0x0000000200000000  (8589934592)
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=1) rc=-857054416 -> 640x481
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=0) rc=-857054416 -> 640x480
+  qcamera_release_sensor rc=-832536576
+
+[+] qcamera_get_sensor(hal, 3) -> 0x7cce604400
+sensor object (0x7cce604400, 128 bytes):
+  +0x00 00 a0 60 ce 7c 00 00 00 03 00 00 00 00 00 00 00  |..`.|...........|
+  +0x10 00 00 00 00 00 00 00 00 90 00 60 ce 7c 00 00 00  |..........`.|...|
+  +0x20 c0 00 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |..`.|...........|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x70 00 44 60 ce 7c 00 00 00 00 00 00 00 00 00 00 00  |.D`.|...........|
+  w0  +0x00 = 0x0000007cce60a000  (536038383616)
+  w1  +0x08 = 0x0000000000000003  (3)
+  w3  +0x18 = 0x0000007cce600090  (536038342800)
+  w4  +0x20 = 0x0000007cce6000c0  (536038342848)
+  w14 +0x70 = 0x0000007cce604400  (536038360064)
+  qcamera_get_sensor_dim -> 0x7cce604410  {w=0 h=0}
+  sensor+0x18 (capability?) = 0x7cce600090
+  capability (0x7cce600090, 96 bytes):
+  +0x00 00 80 0c cf 7c 00 00 00 00 10 00 00 00 00 00 00  |....|...........|
+  +0x10 0a 00 00 00 00 00 00 00 10 40 61 ce 7c 00 00 00  |.........@a.|...|
+  +0x20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 70 0c cf 7c 00 00 00 00 10 00 00 00 00 00 00  |.p..|...........|
+  +0x40 0b 00 00 00 00 00 00 00 10 40 61 ce 7c 00 00 00  |.........@a.|...|
+  +0x50 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x0000007ccf0c8000  (536049647616)
+  w1  +0x08 = 0x0000000000001000  (4096)
+  w2  +0x10 = 0x000000000000000a  (10)
+  w3  +0x18 = 0x0000007cce614010  (536038424592)
+  w4  +0x20 = 0x0000000000000001  (1)
+  w6  +0x30 = 0x0000007ccf0c7000  (536049643520)
+  w7  +0x38 = 0x0000000000001000  (4096)
+  w8  +0x40 = 0x000000000000000b  (11)
+  w9  +0x48 = 0x0000007cce614010  (536038424592)
+  w10 +0x50 = 0x0000000000000002  (2)
+  qcamera_query_sensor_info rc=0
+  sensor info (0x7fccea6940, 64 bytes):
+  +0x00 80 02 00 00 e0 01 00 00 70 00 00 00 08 00 00 00  |........p.......|
+  +0x10 00 00 00 00 08 00 00 00 01 00 00 00 01 00 00 00  |................|
+  +0x20 00 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x000001e000000280  (2061584302720)
+  w1  +0x08 = 0x0000000800000070  (34359738480)
+  w2  +0x10 = 0x0000000800000000  (34359738368)
+  w3  +0x18 = 0x0000000100000001  (4294967297)
+  w4  +0x20 = 0x0000000300000000  (12884901888)
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=1) rc=-857054416 -> 640x481
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=0) rc=-857054416 -> 640x480
+  qcamera_release_sensor rc=-832536576
+[*] qcamera_close rc=-832536576
+done.
+exit=0
+
+########## (start stage folded into stage 4)
+
+########## STAGE 4: all four cameras (6 rounds, exp=300 gain=100)
+hal before stream: ''
+cam_direct — B1 bring-up (stage=all cam=0)
+[+] dlopen /system/vendor/lib64/libqcameraoculushal.so -> 0x25cc21a479aa6751
+[+] all 14 qcamera_* symbols resolved
+
+=== STAGE 0b: syncboss camera power + FSIN strobe ===
+[+] open /dev/syncboss_stream0 -> fd 3
+[+] open /dev/syncboss0 -> fd 4
+[+] raw syncboss CAMERA_PROBE (type 40) -> write 3
+[+] dlopen /system/vendor/lib64/libsyncboss.so -> 0xa382aeb4ac078635
+[+] syncboss_init(&handle, NULL) rc=0 handle=0x7e17e0a9c0
+[+] syncboss_camera_probe rc=0 out=0x0f
+[*] set_bpp(8) rc=0
+[*] camera_init(4) rc=0
+
+=== STAGE 1: enumerate ===
+[+] qcamera_open(0) -> 0x7e17e1f690
+hal context (0x7e17e1f690, 112 bytes):
+  +0x00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x10 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 a1 e1 17 7e 00 00 00 00 00 00 00 00 00 00 00  |....~...........|
+  +0x40 00 00 00 00 00 00 00 00 04 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w6  +0x30 = 0x0000007e17e1a100  (541566542080)
+  w9  +0x48 = 0x0000000000000004  (4)
+[+] qcamera_num_sensors() = 4  (expect 4)
+
+[+] qcamera_get_sensor(hal, 0) -> 0x7e17e06c00
+sensor object (0x7e17e06c00, 128 bytes):
+  +0x00 90 f6 e1 17 7e 00 00 00 00 00 00 00 00 00 00 00  |....~...........|
+  +0x10 00 00 00 00 00 00 00 00 00 09 e0 17 7e 00 00 00  |............~...|
+  +0x20 30 09 e0 17 7e 00 00 00 00 00 00 00 00 00 00 00  |0...~...........|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x70 00 6c e0 17 7e 00 00 00 00 00 00 00 00 00 00 00  |.l..~...........|
+  w0  +0x00 = 0x0000007e17e1f690  (541566563984)
+  w3  +0x18 = 0x0000007e17e00900  (541566437632)
+  w4  +0x20 = 0x0000007e17e00930  (541566437680)
+  w14 +0x70 = 0x0000007e17e06c00  (541566462976)
+  qcamera_get_sensor_dim -> 0x7e17e06c10  {w=0 h=0}
+  sensor+0x18 (capability?) = 0x7e17e00900
+  capability (0x7e17e00900, 96 bytes):
+  +0x00 00 40 89 18 7e 00 00 00 00 10 00 00 00 00 00 00  |.@..~...........|
+  +0x10 1c 00 00 00 00 00 00 00 00 a1 e1 17 7e 00 00 00  |............~...|
+  +0x20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 30 89 18 7e 00 00 00 00 10 00 00 00 00 00 00  |.0..~...........|
+  +0x40 1d 00 00 00 00 00 00 00 00 a1 e1 17 7e 00 00 00  |............~...|
+  +0x50 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x0000007e18894000  (541577527296)
+  w1  +0x08 = 0x0000000000001000  (4096)
+  w2  +0x10 = 0x000000000000001c  (28)
+  w3  +0x18 = 0x0000007e17e1a100  (541566542080)
+  w4  +0x20 = 0x0000000000000001  (1)
+  w6  +0x30 = 0x0000007e18893000  (541577523200)
+  w7  +0x38 = 0x0000000000001000  (4096)
+  w8  +0x40 = 0x000000000000001d  (29)
+  w9  +0x48 = 0x0000007e17e1a100  (541566542080)
+  w10 +0x50 = 0x0000000000000002  (2)
+  qcamera_query_sensor_info rc=0
+  sensor info (0x7ff02f5880, 64 bytes):
+  +0x00 80 02 00 00 e0 01 00 00 70 00 00 00 08 00 00 00  |........p.......|
+  +0x10 00 00 00 00 08 00 00 00 01 00 00 00 01 00 00 00  |................|
+  +0x20 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x000001e000000280  (2061584302720)
+  w1  +0x08 = 0x0000000800000070  (34359738480)
+  w2  +0x10 = 0x0000000800000000  (34359738368)
+  w3  +0x18 = 0x0000000100000001  (4294967297)
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=1) rc=-265334160 -> 640x481
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=0) rc=-265334160 -> 640x480
+  qcamera_release_sensor rc=400588800
+
+[+] qcamera_get_sensor(hal, 1) -> 0x7e17e06c00
+sensor object (0x7e17e06c00, 128 bytes):
+  +0x00 90 f6 e1 17 7e 00 00 00 01 00 00 00 00 00 00 00  |....~...........|
+  +0x10 00 00 00 00 00 00 00 00 00 09 e0 17 7e 00 00 00  |............~...|
+  +0x20 30 09 e0 17 7e 00 00 00 00 00 00 00 00 00 00 00  |0...~...........|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x70 00 6c e0 17 7e 00 00 00 00 00 00 00 00 00 00 00  |.l..~...........|
+  w0  +0x00 = 0x0000007e17e1f690  (541566563984)
+  w1  +0x08 = 0x0000000000000001  (1)
+  w3  +0x18 = 0x0000007e17e00900  (541566437632)
+  w4  +0x20 = 0x0000007e17e00930  (541566437680)
+  w14 +0x70 = 0x0000007e17e06c00  (541566462976)
+  qcamera_get_sensor_dim -> 0x7e17e06c10  {w=0 h=0}
+  sensor+0x18 (capability?) = 0x7e17e00900
+  capability (0x7e17e00900, 96 bytes):
+  +0x00 00 40 89 18 7e 00 00 00 00 10 00 00 00 00 00 00  |.@..~...........|
+  +0x10 1c 00 00 00 00 00 00 00 00 a1 e1 17 7e 00 00 00  |............~...|
+  +0x20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 30 89 18 7e 00 00 00 00 10 00 00 00 00 00 00  |.0..~...........|
+  +0x40 1d 00 00 00 00 00 00 00 00 a1 e1 17 7e 00 00 00  |............~...|
+  +0x50 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x0000007e18894000  (541577527296)
+  w1  +0x08 = 0x0000000000001000  (4096)
+  w2  +0x10 = 0x000000000000001c  (28)
+  w3  +0x18 = 0x0000007e17e1a100  (541566542080)
+  w4  +0x20 = 0x0000000000000001  (1)
+  w6  +0x30 = 0x0000007e18893000  (541577523200)
+  w7  +0x38 = 0x0000000000001000  (4096)
+  w8  +0x40 = 0x000000000000001d  (29)
+  w9  +0x48 = 0x0000007e17e1a100  (541566542080)
+  w10 +0x50 = 0x0000000000000002  (2)
+  qcamera_query_sensor_info rc=0
+  sensor info (0x7ff02f5880, 64 bytes):
+  +0x00 80 02 00 00 e0 01 00 00 70 00 00 00 08 00 00 00  |........p.......|
+  +0x10 00 00 00 00 08 00 00 00 01 00 00 00 01 00 00 00  |................|
+  +0x20 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x000001e000000280  (2061584302720)
+  w1  +0x08 = 0x0000000800000070  (34359738480)
+  w2  +0x10 = 0x0000000800000000  (34359738368)
+  w3  +0x18 = 0x0000000100000001  (4294967297)
+  w4  +0x20 = 0x0000000100000000  (4294967296)
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=1) rc=-265334160 -> 640x481
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=0) rc=-265334160 -> 640x480
+  qcamera_release_sensor rc=400588800
+
+[+] qcamera_get_sensor(hal, 2) -> 0x7e17e06c00
+sensor object (0x7e17e06c00, 128 bytes):
+  +0x00 90 f6 e1 17 7e 00 00 00 02 00 00 00 00 00 00 00  |....~...........|
+  +0x10 00 00 00 00 00 00 00 00 00 09 e0 17 7e 00 00 00  |............~...|
+  +0x20 30 09 e0 17 7e 00 00 00 00 00 00 00 00 00 00 00  |0...~...........|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x70 00 6c e0 17 7e 00 00 00 00 00 00 00 00 00 00 00  |.l..~...........|
+  w0  +0x00 = 0x0000007e17e1f690  (541566563984)
+  w1  +0x08 = 0x0000000000000002  (2)
+  w3  +0x18 = 0x0000007e17e00900  (541566437632)
+  w4  +0x20 = 0x0000007e17e00930  (541566437680)
+  w14 +0x70 = 0x0000007e17e06c00  (541566462976)
+  qcamera_get_sensor_dim -> 0x7e17e06c10  {w=0 h=0}
+  sensor+0x18 (capability?) = 0x7e17e00900
+  capability (0x7e17e00900, 96 bytes):
+  +0x00 00 40 89 18 7e 00 00 00 00 10 00 00 00 00 00 00  |.@..~...........|
+  +0x10 1c 00 00 00 00 00 00 00 00 a1 e1 17 7e 00 00 00  |............~...|
+  +0x20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 30 89 18 7e 00 00 00 00 10 00 00 00 00 00 00  |.0..~...........|
+  +0x40 1d 00 00 00 00 00 00 00 00 a1 e1 17 7e 00 00 00  |............~...|
+  +0x50 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x0000007e18894000  (541577527296)
+  w1  +0x08 = 0x0000000000001000  (4096)
+  w2  +0x10 = 0x000000000000001c  (28)
+  w3  +0x18 = 0x0000007e17e1a100  (541566542080)
+  w4  +0x20 = 0x0000000000000001  (1)
+  w6  +0x30 = 0x0000007e18893000  (541577523200)
+  w7  +0x38 = 0x0000000000001000  (4096)
+  w8  +0x40 = 0x000000000000001d  (29)
+  w9  +0x48 = 0x0000007e17e1a100  (541566542080)
+  w10 +0x50 = 0x0000000000000002  (2)
+  qcamera_query_sensor_info rc=0
+  sensor info (0x7ff02f5880, 64 bytes):
+  +0x00 80 02 00 00 e0 01 00 00 70 00 00 00 08 00 00 00  |........p.......|
+  +0x10 00 00 00 00 08 00 00 00 01 00 00 00 01 00 00 00  |................|
+  +0x20 00 00 00 00 02 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x000001e000000280  (2061584302720)
+  w1  +0x08 = 0x0000000800000070  (34359738480)
+  w2  +0x10 = 0x0000000800000000  (34359738368)
+  w3  +0x18 = 0x0000000100000001  (4294967297)
+  w4  +0x20 = 0x0000000200000000  (8589934592)
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=1) rc=-265334160 -> 640x481
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=0) rc=-265334160 -> 640x480
+  qcamera_release_sensor rc=400588800
+
+[+] qcamera_get_sensor(hal, 3) -> 0x7e17e06c00
+sensor object (0x7e17e06c00, 128 bytes):
+  +0x00 90 f6 e1 17 7e 00 00 00 03 00 00 00 00 00 00 00  |....~...........|
+  +0x10 00 00 00 00 00 00 00 00 00 09 e0 17 7e 00 00 00  |............~...|
+  +0x20 30 09 e0 17 7e 00 00 00 00 00 00 00 00 00 00 00  |0...~...........|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x40 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x50 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x60 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x70 00 6c e0 17 7e 00 00 00 00 00 00 00 00 00 00 00  |.l..~...........|
+  w0  +0x00 = 0x0000007e17e1f690  (541566563984)
+  w1  +0x08 = 0x0000000000000003  (3)
+  w3  +0x18 = 0x0000007e17e00900  (541566437632)
+  w4  +0x20 = 0x0000007e17e00930  (541566437680)
+  w14 +0x70 = 0x0000007e17e06c00  (541566462976)
+  qcamera_get_sensor_dim -> 0x7e17e06c10  {w=0 h=0}
+  sensor+0x18 (capability?) = 0x7e17e00900
+  capability (0x7e17e00900, 96 bytes):
+  +0x00 00 40 89 18 7e 00 00 00 00 10 00 00 00 00 00 00  |.@..~...........|
+  +0x10 1c 00 00 00 00 00 00 00 00 a1 e1 17 7e 00 00 00  |............~...|
+  +0x20 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 30 89 18 7e 00 00 00 00 10 00 00 00 00 00 00  |.0..~...........|
+  +0x40 1d 00 00 00 00 00 00 00 00 a1 e1 17 7e 00 00 00  |............~...|
+  +0x50 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x0000007e18894000  (541577527296)
+  w1  +0x08 = 0x0000000000001000  (4096)
+  w2  +0x10 = 0x000000000000001c  (28)
+  w3  +0x18 = 0x0000007e17e1a100  (541566542080)
+  w4  +0x20 = 0x0000000000000001  (1)
+  w6  +0x30 = 0x0000007e18893000  (541577523200)
+  w7  +0x38 = 0x0000000000001000  (4096)
+  w8  +0x40 = 0x000000000000001d  (29)
+  w9  +0x48 = 0x0000007e17e1a100  (541566542080)
+  w10 +0x50 = 0x0000000000000002  (2)
+  qcamera_query_sensor_info rc=0
+  sensor info (0x7ff02f5880, 64 bytes):
+  +0x00 80 02 00 00 e0 01 00 00 70 00 00 00 08 00 00 00  |........p.......|
+  +0x10 00 00 00 00 08 00 00 00 01 00 00 00 01 00 00 00  |................|
+  +0x20 00 00 00 00 03 00 00 00 00 00 00 00 00 00 00 00  |................|
+  +0x30 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|
+  w0  +0x00 = 0x000001e000000280  (2061584302720)
+  w1  +0x08 = 0x0000000800000070  (34359738480)
+  w2  +0x10 = 0x0000000800000000  (34359738368)
+  w3  +0x18 = 0x0000000100000001  (4294967297)
+  w4  +0x20 = 0x0000000300000000  (12884901888)
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=1) rc=-265334160 -> 640x481
+  qcamera_query_buffer_dimensions(bpp=8, meta_row=0) rc=-265334160 -> 640x480
+  qcamera_release_sensor rc=400588800
+
+=== STAGE 4: start all 4 sensors ===
+[+] cam 0: start_sensor rc=0 started=1 fd=30
+[+] cam 1: start_sensor rc=0 started=1 fd=43
+[+] cam 2: start_sensor rc=0 started=1 fd=54
+[+] cam 3: start_sensor rc=0 started=1 fd=66
+[*] 4/4 sensors streaming
+
+=== STAGE 4b: syncboss startCameras ===
+[+] set_frame_rate(33333) rc=0
+[+] set_exposure_gain(exp=8000 gain=255 x4) rc=0
+[*] set_frame_tag_mode(1) rc=0
+[+] syncboss_camera_start_streaming(4) rc=0  <-- FSIN strobe
+[cam 0 round 0] ts=87479.488672000 size=307840 min=0 max=255 mean=40.7 -> /data/local/tmp/camdirect/cam0_000.gray
+[cam 1 round 0] ts=87479.488672000 size=307840 min=0 max=255 mean=51.8 -> /data/local/tmp/camdirect/cam1_000.gray
+[cam 2 round 0] ts=87479.488755000 size=307840 min=0 max=255 mean=32.7 -> /data/local/tmp/camdirect/cam2_000.gray
+[cam 3 round 0] ts=87479.488755000 size=307840 min=0 max=255 mean=32.6 -> /data/local/tmp/camdirect/cam3_000.gray
+[cam 0 round 1] ts=87479.507164000 size=307840 min=0 max=255 mean=98.1 -> /data/local/tmp/camdirect/cam0_001.gray
+[cam 1 round 1] ts=87479.507164000 size=307840 min=0 max=255 mean=120.6 -> /data/local/tmp/camdirect/cam1_001.gray
+[cam 2 round 1] ts=87479.507162000 size=307840 min=0 max=255 mean=74.8 -> /data/local/tmp/camdirect/cam2_001.gray
+[cam 3 round 1] ts=87479.507162000 size=307840 min=0 max=255 mean=82.8 -> /data/local/tmp/camdirect/cam3_001.gray
+[cam 0 round 2] ts=87479.521935000 size=307840 min=0 max=255 mean=4.7 -> /data/local/tmp/camdirect/cam0_002.gray
+[cam 1 round 2] ts=87479.521935000 size=307840 min=0 max=255 mean=5.1 -> /data/local/tmp/camdirect/cam1_002.gray
+[cam 2 round 2] ts=87479.525521000 size=307840 min=0 max=255 mean=4.9 -> /data/local/tmp/camdirect/cam2_002.gray
+[cam 3 round 2] ts=87479.525521000 size=307840 min=0 max=255 mean=4.9 -> /data/local/tmp/camdirect/cam3_002.gray
+[cam 0 round 3] ts=87479.540992000 size=307840 min=0 max=255 mean=97.8 -> /data/local/tmp/camdirect/cam0_003.gray
+[cam 1 round 3] ts=87479.540992000 size=307840 min=0 max=255 mean=120.8 -> /data/local/tmp/camdirect/cam1_003.gray
+[cam 2 round 3] ts=87479.541079000 size=307840 min=0 max=255 mean=74.2 -> /data/local/tmp/camdirect/cam2_003.gray
+[cam 3 round 3] ts=87479.541079000 size=307840 min=0 max=255 mean=82.9 -> /data/local/tmp/camdirect/cam3_003.gray
+[cam 0 round 4] ts=87479.873820000 size=307840 min=0 max=255 mean=99.5 -> /data/local/tmp/camdirect/cam0_004.gray
+[cam 1 round 4] ts=87479.888155000 size=307840 min=0 max=255 mean=5.1 -> /data/local/tmp/camdirect/cam1_004.gray
+[cam 2 round 4] ts=87479.907154000 size=307840 min=0 max=255 mean=74.4 -> /data/local/tmp/camdirect/cam2_004.gray
+[cam 3 round 4] ts=87479.921494000 size=307840 min=0 max=255 mean=4.8 -> /data/local/tmp/camdirect/cam3_004.gray
+[cam 0 round 5] ts=87479.940488000 size=307840 min=0 max=255 mean=99.7 -> /data/local/tmp/camdirect/cam0_005.gray
+[cam 1 round 5] ts=87479.955163000 size=307840 min=0 max=255 mean=5.1 -> /data/local/tmp/camdirect/cam1_005.gray
+[cam 2 round 5] ts=87479.988206000 size=307840 min=0 max=255 mean=4.9 -> /data/local/tmp/camdirect/cam2_005.gray
+[cam 3 round 5] ts=87480.040479000 size=307840 min=0 max=255 mean=83.0 -> /data/local/tmp/camdirect/cam3_005.gray
+[*] qcamera_close rc=400588800
+[*] camera_stop_streaming rc=0
+[*] camera_release rc=0
+[*] camera_deinit rc=0
+[*] syncboss_deinit rc=400588800
+[+] raw syncboss CAMERA_RELEASE (type 41) -> write 3
+done.
+exit=0
+
+########## dmesg (camera power gating via syncboss?)
+[87479.332034] msm_csid_irq CSID3_IRQ_STATUS_ADDR = 0x800
+[87479.353927] msm_csid_init: CSID_VERSION = 0x30050000
+[87479.355609] msm_csid_irq CSID0_IRQ_STATUS_ADDR = 0x800
+[87479.366938] msm_csid_irq CSID0_IRQ_STATUS_ADDR = 0x800
+[87479.374792] msm_csid_init: CSID_VERSION = 0x30050000
+[87479.388834] msm_csid_init: CSID_VERSION = 0x30050000
+[87479.404419] msm_csid_init: CSID_VERSION = 0x30050000
+[87480.099109] msm_csiphy_release csiphy dev NULL / ref_count ZERO
+[87480.099128] msm_csiphy_release csiphy dev NULL / ref_count ZERO
+[87480.099136] msm_csiphy_release csiphy dev NULL / ref_count ZERO
+[87480.099145] msm_csid_release: csid invalid state 1
+[87480.099152] msm_csid_release: csid invalid state 1
+[87480.099159] msm_csid_release: csid invalid state 1
+[87480.099166] msm_csid_release: csid invalid state 1
+[87480.103333] oculus_syncboss spi12.0: Turning off cameras
+[87480.141344] oculus_syncboss spi12.0: SyncBoss handle closed
+[87480.141482] oculus_syncboss spi12.0: Turning off cameras
+[87480.141521] oculus_syncboss spi12.0: Stopping streaming thread work
+[87480.141526] oculus_syncboss spi12.0: Stopping stream
+[87480.141531] oculus_syncboss spi12.0: Telling SyncBoss to go to sleep
+[87480.141538] oculus_syncboss spi12.0: Waiting for syncboss to be asleep
+[87480.201726] oculus_syncboss spi12.0: SyncBoss is asleep (after 60ms)
+[87480.203228] oculus_syncboss spi12.0: Streaming thread stopped
+[87480.204830] oculus_syncboss spi12.0: Asserting MCU reset
+[87480.204891] oculus_syncboss spi12.0: SyncBoss handle closed
+
+########## VENDOR LOGCAT
+09-01 22:52:25.206  6117  6117 I QCameraDriver: Camera 1: mini-driver opening camera
+09-01 22:52:25.221  6117  6117 I QCameraDriver: Camera 1: mini-driver opened camera
+09-01 22:52:25.231  6117  6117 I QCameraDriver: Camera 1: mini-driver closing camera
+09-01 22:52:25.234  6117  6117 I QCameraDriver: Camera 1: mini-driver closed rc = 0
+09-01 22:52:25.236  6117  6117 I QCameraDriver: Camera 2: mini-driver opening camera
+09-01 22:52:25.251  6117  6117 I QCameraDriver: Camera 2: mini-driver opened camera
+09-01 22:52:25.253  6117  6117 I QCameraDriver: Camera 2: mini-driver closing camera
+09-01 22:52:25.253  6117  6117 I QCameraDriver: Camera 2: mini-driver closed rc = 0
+09-01 22:52:25.253  6117  6117 I QCameraDriver: Camera 3: mini-driver opening camera
+09-01 22:52:25.263  6117  6117 I QCameraDriver: Camera 3: mini-driver opened camera
+09-01 22:52:25.274  6117  6117 I QCameraDriver: Camera 3: mini-driver closing camera
+09-01 22:52:25.275  6117  6117 I QCameraDriver: Camera 3: mini-driver closed rc = 0
+09-01 22:52:25.276  6117  6117 I QCameraDriver: Camera 0: mini-driver opening camera
+09-01 22:52:25.284  6117  6117 I QCameraDriver: Camera 0: mini-driver opened camera
+09-01 22:52:25.285  6117  6117 I QCameraOculusHAL: Camera 0: Setting num_bufs as 4
+09-01 22:52:25.285  6117  6117 I QCameraOculusHAL: Camera 0: Starting camera
+09-01 22:52:25.285  6117  6117 D QCameraOculusHAL: Camera 0: get_bufs stream:0 len:307840 planes:1 offset:0
+09-01 22:52:25.286  6117  6117 I QCameraDriver: Camera 0: Buffer init done. buf_num = 4, buf_idx = 0
+09-01 22:52:25.296  6117  6117 I QCameraOculusHAL: Camera 0: Started camera
+09-01 22:52:25.297  6117  6117 I QCameraDriver: Camera 1: mini-driver opening camera
+09-01 22:52:25.308  6117  6117 I QCameraDriver: Camera 1: mini-driver opened camera
+09-01 22:52:25.308  6117  6117 I QCameraOculusHAL: Camera 1: Setting num_bufs as 4
+09-01 22:52:25.308  6117  6117 I QCameraOculusHAL: Camera 1: Starting camera
+09-01 22:52:25.308  6117  6117 D QCameraOculusHAL: Camera 1: get_bufs stream:1 len:307840 planes:1 offset:0
+09-01 22:52:25.309  6117  6117 I QCameraDriver: Camera 1: Buffer init done. buf_num = 4, buf_idx = 0
+09-01 22:52:25.311  6117  6117 I QCameraOculusHAL: Camera 1: Started camera
+09-01 22:52:25.311  6117  6117 I QCameraDriver: Camera 2: mini-driver opening camera
+09-01 22:52:25.322  6117  6117 I QCameraDriver: Camera 2: mini-driver opened camera
+09-01 22:52:25.322  6117  6117 I QCameraOculusHAL: Camera 2: Setting num_bufs as 4
+09-01 22:52:25.322  6117  6117 I QCameraOculusHAL: Camera 2: Starting camera
+09-01 22:52:25.322  6117  6117 D QCameraOculusHAL: Camera 2: get_bufs stream:2 len:307840 planes:1 offset:0
+09-01 22:52:25.323  6117  6117 I QCameraDriver: Camera 2: Buffer init done. buf_num = 4, buf_idx = 0
+09-01 22:52:25.326  6117  6117 I QCameraOculusHAL: Camera 2: Started camera
+09-01 22:52:25.326  6117  6117 I QCameraDriver: Camera 3: mini-driver opening camera
+09-01 22:52:25.329  6117  6117 I QCameraDriver: Camera 3: mini-driver opened camera
+09-01 22:52:25.330  6117  6117 I QCameraOculusHAL: Camera 3: Setting num_bufs as 4
+09-01 22:52:25.330  6117  6117 I QCameraOculusHAL: Camera 3: Starting camera
+09-01 22:52:25.330  6117  6117 D QCameraOculusHAL: Camera 3: get_bufs stream:3 len:307840 planes:1 offset:0
+09-01 22:52:25.331  6117  6117 I QCameraDriver: Camera 3: Buffer init done. buf_num = 4, buf_idx = 0
+09-01 22:52:25.334  6117  6117 I QCameraOculusHAL: Camera 3: Started camera
+09-01 22:52:26.012  6117  6117 I QCameraDriver: Camera 0: Buffers are enqueued, ready to free buffers.
+09-01 22:52:26.013  6117  6117 I QCameraDriver: Camera 0: mini-driver stopped streaming
+09-01 22:52:26.013  6117  6117 I QCameraOculusHAL: Camera 0: qcamera sensor stopped.
+09-01 22:52:26.013  6117  6117 I QCameraDriver: Camera 0: mini-driver closing camera
+09-01 22:52:26.014  6117  6117 I QCameraDriver: Camera 0: mini-driver closed rc = 0
+09-01 22:52:26.015  6117  6117 I QCameraDriver: Camera 1: Buffers are enqueued, ready to free buffers.
+09-01 22:52:26.016  6117  6117 I QCameraDriver: Camera 1: mini-driver stopped streaming
+09-01 22:52:26.016  6117  6117 I QCameraOculusHAL: Camera 1: qcamera sensor stopped.
+09-01 22:52:26.016  6117  6117 I QCameraDriver: Camera 1: mini-driver closing camera
+09-01 22:52:26.016  6117  6117 I QCameraDriver: Camera 1: mini-driver closed rc = 0
+09-01 22:52:26.017  6117  6117 I QCameraDriver: Camera 2: Buffers are enqueued, ready to free buffers.
+09-01 22:52:26.017  6117  6117 I QCameraDriver: Camera 2: mini-driver stopped streaming
+09-01 22:52:26.017  6117  6117 I QCameraOculusHAL: Camera 2: qcamera sensor stopped.
+09-01 22:52:26.017  6117  6117 I QCameraDriver: Camera 2: mini-driver closing camera
+09-01 22:52:26.018  6117  6117 I QCameraDriver: Camera 2: mini-driver closed rc = 0
+09-01 22:52:26.020  6117  6117 I QCameraDriver: Camera 3: Buffers are enqueued, ready to free buffers.
+09-01 22:52:26.021  6117  6117 I QCameraDriver: Camera 3: mini-driver stopped streaming
+09-01 22:52:26.021  6117  6117 I QCameraOculusHAL: Camera 3: qcamera sensor stopped.
+09-01 22:52:26.021  6117  6117 I QCameraDriver: Camera 3: mini-driver closing camera
+09-01 22:52:26.022  6117  6117 I QCameraDriver: Camera 3: mini-driver closed rc = 0
+=== RESTORE ===
+tracking=running hal=running enforce=Enforcing
+=== DONE Tue Sep  1 22:52:37 BST 2026 ===

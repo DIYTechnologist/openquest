@@ -716,3 +716,49 @@ STATUS: VIO validated (0.378m trajectory, exports/vio-precise/). Atomic hook ~60
   precise camId+ts with the poll-tap pixels via timing. The poll-tap remains the (density-limited)
   pixel source. This is a real wall for the "one clean atomic capture" goal.
 STATUS: VIO validated (0.378m). Atomic hook = clean metadata; pixel link unsolved.
+
+## RETRY SESSION 10 — ImageBuffer pool RESOLVED (static RE, 2026-09-01, by opus)
+
+Closed the "pixels are pool-referenced / not pointer-reachable" wall from session 9b. Full
+writeup: `notes/09-imagebuffer-pool-re.md`. One-line answer:
+
+Camera pixels are delivered as `OVR::Sensors::ImageBuffer` objects reconstructed **per frame**
+in trackingservice from **two native_handles carried in the FrameSet** (ashmem metadata +
+gralloc/ION pixels). `libvrsensors-hidlwrapper.so` calls
+`make_shared<ImageBuffer>(hidl_handle,hidl_handle)` -> `ImageBuffer::ImageBuffer(native_handle*
+meta, native_handle* gralloc)` @libimagebuffer.so 0x3598, which mmaps the metadata and
+GraphicBuffer::lock()s the pixels. AFTER the ctor: `this+0x60` = CPU pixel VA;
+`*(this+0x40)` = ImageBufferSharedData {w@8,h@0xc,fmt@0x10(u16),usage@0x18,**ts@0x38 u64**}.
+
+- libimagebuffer.so is loaded in trackingservice from /system/lib64 -> /data LD_PRELOAD works.
+- The atomic FMQ-read hook (session 9b) tapped too early (before this reconstruction) -> that's
+  why pixels weren't reachable there. The ctor is the correct tap.
+- Built (NOT yet run live): `tools/cam_tap/ib_hook.c` -> ib_hook.so, asm-trampoline interpose of
+  the ctor (same GOT/g_real pattern as fs_atomic). Per frame: pixels @+0x60 + ts @sd+0x38.
+- NEXT (needs a live GO capture, headset worn+moving; restart-cascade hazard): preload into TS,
+  confirm ctor fires ~120/s, dump frames, verify ts monotonic + camId round-robin vs fs_atomic.
+
+VERIFIED by me: symbol imports/exports, disassembly of both ctors + the hidlwrapper caller, lib
+is mapped in TS. NOT yet verified live: per-frame call rate, that +0x60/+0x38 read correctly at
+runtime, camId ordering. Marked accordingly.
+
+## RETRY SESSION 10b — ImageBuffer tap VALIDATED LIVE + ts finding (2026-09-01, opus)
+
+Ran ib_hook.so in trackingservice (headset worn+moving). RESULT: dense clean camera frames.
+- 240 frames dumped, 640x481 mono8, real image content (rendered PNGs = sharp fisheye room
+  views; frame0 vs frame1 = stereo pair). camId = id&3 (4 cams round-robin @30 Hz).
+- ImageBuffer object layout confirmed live: +0x40 sd, +0x50 GraphicBuffer, +0x58 isYCbCr=0,
+  +0x60 pixel VA. sd VA & pixel VA move every frame (walking mmap) -> per-frame ctor hook is
+  the correct tap (a persistent-VA poller would fail).
+- Data: exports/ib-capture-2026-09-01/ (frames tar + logs + sample PNGs).
+
+EXPOSURE-TS FINDING (wider sd/this dump): the timestamp is NOT in the ImageBuffer/sd — sd is
+zero past 0x28 (sd+0x38 ts field = 0 on the receiver). Exposure ts travels in the FrameSet
+(fs_atomic's per-image ts words), not the shared image metadata.
+
+STABILITY NOTE: loading ib_hook.so + fs_atomic.so as TWO preloads destabilised TS (both init'd,
+then TS exited, 0 frames). Fix = single merged library: BUILT tools/cam_tap/ibfs_hook.{c,so}
+(ctor + FrameSet-read trampolines in one .so). Not yet run live.
+
+Device always restored after each run: TS clean via init, Enforcing. Restart-cascade hazard hit
+(shell SIGKILL exit 137; setenforce 1 needed a retry) — recovered.

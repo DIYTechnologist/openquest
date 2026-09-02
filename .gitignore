@@ -70,3 +70,9 @@ exports/vio-stereo*/**/*.png
 
 exports/vio-precise/**/*.png
 exports/vio-precise/**/*.pgm
+
+# direct-capture raw frames + built EuRoC dataset (bulky; CSVs/notes kept)
+exports/vio-direct-*/raw/
+exports/vio-direct-*/euroc/
+exports/vio-direct-*/sbout/
+exports/**/syncboss.raw
