@@ -112,6 +112,7 @@ def fit_from_chunks(cap, kinds):
     starts = [c[1] for c in chunks]
     pkts = parse_syncboss_with_offsets(os.path.join(cap, 'syncboss.raw'))
     fits = {}
+    slope = None
     for kind in kinds:
         xs, ys = [], []
         for k, ts, off in pkts:
@@ -124,10 +125,19 @@ def fit_from_chunks(cap, kinds):
         if len(xs) < 100:
             continue
         xs = np.array(xs, float); ys = np.array(ys, float)
-        a = (len(xs)*np.sum(xs*ys) - xs.sum()*ys.sum()) / (len(xs)*np.sum(xs*xs) - xs.sum()**2)
+        # Both packet types are stamped by the SAME MCU clock, so they share a rate; only the epoch
+        # differs (0xe0 restarts at camera-stream start). Fit the slope once, from the 1 kHz IMU
+        # where it is well constrained, and reuse it. Fitting the 30 Hz exposure slope separately
+        # gave 998.83 vs the IMU's 1000.03 -- a 0.12% rate error that put the cameras 0.88 s out.
+        if slope is None:
+            a = (len(xs)*np.sum(xs*ys) - xs.sum()*ys.sum()) / (len(xs)*np.sum(xs*xs) - xs.sum()**2)
+        else:
+            a = slope
         b = np.percentile(ys - a*xs, 5)          # lower envelope: arrival >= true time
         resid = (ys - (a*xs + b))
         fits[kind] = (a, b)
+        if slope is None:
+            slope = a                       # constrain later types to the IMU-derived rate
         print(f"  chunk-fit type 0x{kind:02x}: mono_ns = {a:.6f}*nrf_us + {b:.0f}  "
               f"(n={len(xs)}, median arrival lag {np.median(resid)/1e6:.2f} ms)")
     return fits
@@ -273,14 +283,34 @@ def main(cap, out):
     chunk_fits = {}
     if os.path.exists(os.path.join(cap, 'syncboss_chunks.csv')):
         print("using syncboss_chunks.csv to fit both clocks to host time:")
-        chunk_fits = fit_from_chunks(cap, (0xe0, 0x50))
-    if 0xe0 in chunk_fits and 0x50 in chunk_fits:
+        chunk_fits = fit_from_chunks(cap, (0x50, 0xe0))
+    exp_in_mono = 0xe0 in chunk_fits and 0x50 in chunk_fits
+    if exp_in_mono:
         ae, be = chunk_fits[0xe0]
         exp_ns = [int(ae * t + be) for t in exp_us]          # exposures on host monotonic
     else:
         exp_ns = [t * 1000 + TIME_BASE_NS + CAM_SHIFT_NS for t in exp_us]
 
     def snap(ts_mono):
+        """Snap a frame's CLOCK_MONOTONIC stamp to its exposure strobe.
+
+        When the chunk fit is available both sides are already in host-monotonic time, so this is a
+        direct nearest-neighbour lookup. The old path instead converted through fit_clock()'s
+        frame<->exposure pairing, which is degenerate under integer frame shifts and put the
+        cameras 0.87 s ahead of the IMU on this capture.
+        """
+        if exp_in_mono:
+            j = bisect.bisect_left(exp_ns, ts_mono)
+            best, bd = None, None
+            for k in (j - 1, j, j + 1):
+                if 0 <= k < len(exp_ns):
+                    dd_ = abs(exp_ns[k] - ts_mono)
+                    if bd is None or dd_ < bd:
+                        bd, best = dd_, k
+            if best is None or bd > 40_000_000:      # further than a frame period: no match
+                return None
+            k = best + KOFF
+            return exp_ns[k] if 0 <= k < len(exp_ns) else None
         nrf_est = (ts_mono - b) / a
         j = bisect.bisect_left(exp_us, nrf_est)
         best, bd = None, None

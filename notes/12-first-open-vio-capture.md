@@ -501,3 +501,43 @@ genuinely still window and a sharp jerk — the exact pattern the static initial
 and the pattern the synthetic fixture has (where initialisation works at stock thresholds).
 Failing that, the dynamic initialiser's covariance recovery needs proper investigation rather than
 threshold guessing.
+
+## Table-start capture (2026-09-02) — well-conditioned, still not tracking
+
+`exports/vio-table2-2026-09-02/` — 40 s, 4814 files, 40053 IMU samples. Headset left on a table,
+picked up briskly, then carried around. **This is the reference capture to use from now on.**
+
+Quality, all measured:
+| property | value |
+|---|---|
+| excitation on the table (0–15 s) | **0.030–0.088 m/s²** (sensor noise floor) |
+| excitation after pickup | 1.7 → 6.8 m/s² — a ~50× step with a sharp edge |
+| camera↔IMU alignment | **−15 ms**, flow/gyro correlation **0.967** |
+| stereo pairs | 1194 |
+
+Two more clock bugs found and fixed while validating it:
+1. The chunk fit estimated each packet type's clock *rate* independently. With only ~1200 exposure
+   packets at 33 ms arrival quantisation that is unconstrained, and it returned 998.83 against the
+   IMU's 1000.03 — a 0.12% rate error worth 0.88 s over the capture. Both streams come from the
+   same MCU clock, so the rate is now fitted once on the 1 kHz IMU and shared; only the epoch is
+   fitted per type.
+2. Frame→exposure snapping still went through `fit_clock()`'s frame/exposure pairing, which is
+   degenerate under integer frame shifts. With the chunk fit both sides are already in host time,
+   so snapping is now a direct nearest-neighbour lookup in that timeline.
+
+Together these took the measured misalignment from −0.87 s to −15 ms.
+
+**OpenVINS still diverges: ~500–840 m over 23 s.** Initialisation now succeeds (698 poses). Tested
+and excluded on this capture: the inverted `T_imu_cam` convention (624 m), and the rectified
+parallel pinhole pair instead of the divergent fisheye pair (839 m).
+
+### Stop guessing — bisect between the fixture and reality
+The synthetic fixture tracks (7.13 m vs 6.95 m ground truth); the real capture does not, and the
+list of ad-hoc hypotheses is exhausted. The disciplined next step is to make the fixture
+progressively more realistic and find the single change that breaks it:
+1. add realistic IMU noise and a constant bias
+2. swap ideal pinhole intrinsics for the real KB4 fisheye ones
+3. swap identity extrinsics for the real `T_imu_cam` (including the 19.6° divergence)
+4. match the real motion profile (a carried device, not a smooth analytic path)
+
+Whichever step breaks it is the cause. This is entirely offline and needs no further captures.

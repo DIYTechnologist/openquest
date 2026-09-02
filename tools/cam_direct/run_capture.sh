@@ -39,14 +39,43 @@ echo "--- services down at $(date)"
 # then move off. Starting already in motion makes the filter initialise with zero velocity and
 # gravity aligned to an accelerometer reading that contains real acceleration -- it then diverges,
 # which is exactly what our first capture did. See notes/12.
-echo "--- LEAD-IN 20s: put the headset on, then HOLD STILL (do not move yet)"
+# TABLE START. Held on the head a "still" person still reads 0.125 m/s^2 of accelerometer
+# excitation, and the move-off is gradual -- OpenVINS' static initialiser needs the window BEFORE
+# the jerk to be quiet and the jerk itself to be sharp, and a head-worn gradual start satisfies
+# neither (notes/12). Resting on a table gets excitation down to roughly the sensor noise floor
+# and picking it up gives a genuine jerk.
+echo "--- LEAD-IN 20s: leave the headset SITTING STILL ON A TABLE, facing a textured scene"
 sleep 20
 
-echo "--- CAPTURE START $(date) -- HOLD STILL for the first 4 s, THEN move"
-# The first seconds must be stationary so the estimator can initialise; after that, translate
-# (step side to side, lean in/out) rather than only rotating -- pure rotation gives no parallax.
-/data/local/tmp/cam_direct capture 0 30 8000 255
+# Timed cues. The script runs detached, so these go to the log; watch them live with:
+#   adb shell 'su -c "tail -f /data/local/tmp/capture.log"'
+# Wall-clock instructions are unreliable here because the time to stop the framework and HAL
+# varies by several seconds, so the cues are emitted relative to the actual recording start and
+# the still window is made long enough that a few seconds of slop does not matter.
+(
+  sleep 1
+  echo ""
+  echo "=================================================="
+  echo ">>> RECORDING. DO NOT TOUCH IT. Leave it on the table."
+  echo "=================================================="
+  n=15
+  while [ $n -gt 0 ]; do
+    echo "    ... hands off for $n more seconds"
+    sleep 3
+    n=$((n-3))
+  done
+  echo ""
+  echo "=================================================="
+  echo ">>> PICK IT UP NOW - and walk around for 20 s"
+  echo ">>> translate: walk, step side to side, lean in and out"
+  echo "=================================================="
+) &
+CUES=$!
+
+echo "--- CAPTURE START $(date)"
+/data/local/tmp/cam_direct capture 0 40 8000 255
 echo "exit=$?"
+kill $CUES 2>/dev/null
 echo "--- CAPTURE END $(date)"
 
 echo "--- sizes"
