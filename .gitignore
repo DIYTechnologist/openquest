@@ -76,3 +76,10 @@ exports/vio-direct-*/raw/
 exports/vio-direct-*/euroc/
 exports/vio-direct-*/sbout/
 exports/**/syncboss.raw
+
+# VIO experiment scratch (regenerable from raw/ via tools/vio/build_euroc_direct.py)
+exports/vio-direct-*/trunc*/
+exports/vio-direct-*/euroc_t/
+exports/vio-direct-*/rect/
+exports/vio-direct-*/ovconfig_dbg/
+exports/vio-direct-*/ov_*.txt
