@@ -340,3 +340,37 @@ in how measurements reach the estimator rather than in the capture:
    config generator against a known-good dataset and would immediately separate "our data" from
    "our harness". (The ETH host was unreachable from here; use a mirror.)
 3. Only then consider a new capture.
+
+## Camera↔IMU extrinsic convention checked (2026-09-02)
+
+`tools/vio/check_imu_cam_extrinsic.py` validates the camera-to-IMU rotation against the data
+itself, which no static check could do. Angular velocity is observable in both sensors, so
+`omega_cam = R_cam_imu * omega_imu` must hold.
+
+Two false starts worth recording:
+- image *translation* is contaminated by parallax from camera translation — it inflated the
+  omega_x/omega_y estimate by 1.55x and left a residual as large as the signal;
+- essential-matrix decomposition is degenerate at these small inter-frame baselines — it reported
+  8.98 rad/s against the IMU's 0.65.
+
+So the check uses only **in-image rotation**, which can only come from rotation about the optical
+axis and is therefore translation-immune. One axis is enough to separate the two conventions:
+
+| interpretation | \|correlation\| with gyro |
+|---|---|
+| `omega_cam = R_i_c^T * omega_imu` (how Basalt/OpenVINS read `T_imu_cam`) | 0.690 |
+| `omega_cam = R_i_c * omega_imu` (opposite sense) | **0.991** |
+
+**The rotation in our `T_imu_cam` is stored in the opposite sense to what the estimators assume.**
+That is a real finding, and worth fixing in `quest_calib_convert.py`.
+
+**But it is not the blocker.** Re-running OpenVINS with the rotation transposed (801 m) and with a
+proper SE3 inverse (813 m) barely moves the 1070 m baseline. All three drift essentially the same,
+which means visual updates contribute *nothing* in OpenVINS regardless of extrinsics.
+
+Two very different estimators now fail the same way on data that measures as excellent on every
+axis. That makes the **harness** the leading suspect, so the next step is no longer optional:
+run a public EuRoC sequence through `euroc_runner` with the stock OpenVINS EuRoC config. If it
+tracks, the harness is sound and the fault is in our data despite the measurements; if it also
+drifts, `euroc_runner` is feeding OpenVINS incorrectly (a likely candidate: IMU is fed only up to
+each frame timestamp, when the propagator may need samples beyond it).
