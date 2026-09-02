@@ -53,9 +53,13 @@ def main(calib, a, b, out_dir, template_dir):
             f.write(mat_yaml(T) + "\n")
             f.write(f"  cam_overlaps: [{other}]\n")
             f.write("  camera_model: pinhole\n")
-            f.write("  distortion_coeffs: [%.12g, %.12g, %.12g, %.12g]\n"
-                    % (i['k1'], i['k2'], i['k3'], i['k4']))
-            f.write("  distortion_model: equidistant\n")   # == Kannala-Brandt KB4
+            if 'k1' in i:
+                f.write("  distortion_coeffs: [%.12g, %.12g, %.12g, %.12g]\n"
+                        % (i['k1'], i['k2'], i['k3'], i['k4']))
+                f.write("  distortion_model: equidistant\n")   # == Kannala-Brandt KB4
+            else:                                              # ideal pinhole (synthetic test set)
+                f.write("  distortion_coeffs: [0.0, 0.0, 0.0, 0.0]\n")
+                f.write("  distortion_model: radtan\n")
             f.write("  intrinsics: [%.12g, %.12g, %.12g, %.12g]\n"
                     % (i['fx'], i['fy'], i['cx'], i['cy']))
             f.write(f"  resolution: [{res[0]}, {res[1]}]\n")
@@ -87,11 +91,34 @@ def main(calib, a, b, out_dir, template_dir):
     lines = open(src).read().split('\n')
     repl = {
         'gravity_mag': 'gravity_mag: 9.81',
+        # Dynamic init samples init_dyn_num_pose poses across this window and needs each feature seen in
+        # several of them. Over 1 s the sampled poses are far enough apart that most features span
+        # only ~2, leaving measurements just short of the state size. A shorter window packs the
+        # poses closer together.
         'init_window_time': 'init_window_time: 1.0',
+        'init_max_features': 'init_max_features: 100',
         'init_imu_thresh': 'init_imu_thresh: 0.5',      # our capture never sits fully still
-        'init_max_disparity': 'init_max_disparity: 15.0',
+        # OpenVINS picks static vs dynamic init by comparing image disparity against this. Our
+        # captures run ~10 px, so a threshold of 10-15 classifies real motion as "stationary" and
+        # forces the static path forever. Set it well below the observed disparity.
+        'init_max_disparity': 'init_max_disparity: 10.0',
         'calib_cam_intrinsics': 'calib_cam_intrinsics: false',   # factory calibration is trusted
         'calib_cam_extrinsics': 'calib_cam_extrinsics: false',
+        # OpenVINS defaults to STATIC initialisation, which needs the device to sit still and then
+        # jerk into motion. A worn headset is already moving, so static init either never fires
+        # ("no accel jerk detected") or -- worse -- fires mid-motion and initialises with zero
+        # velocity and gravity aligned to an accelerometer reading that includes real acceleration.
+        # That mis-initialisation is consistent with the large drift we saw. Use dynamic init.
+        'init_dyn_use': 'init_dyn_use: false',
+        # Dynamic init also requires a minimum orientation change across the window; 10 deg is more
+        # than a gentle look-around produces in 1 s.
+        'init_dyn_min_deg': 'init_dyn_min_deg: 1.5',
+        # Dynamic init solves a least-squares problem over the window; with the default 50 features
+        # it ends up with fewer measurements than state parameters ("not enough feature
+        # measurements: 374 meas vs 393 state size"). More features fixes that.
+        # The Ceres refinement reports "Residual and Jacobian evaluation failed"; the linear
+        # solution alone is sufficient to bootstrap, and the config documents 0 as "skip the MLE".
+        'init_dyn_mle_max_iter': 'init_dyn_mle_max_iter: 0',
     }
     out_lines = []
     for ln in lines:

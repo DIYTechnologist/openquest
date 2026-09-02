@@ -28,6 +28,9 @@
 
 using namespace ov_msckf;
 
+// how far past each image timestamp to feed IMU before handing over the frame
+static constexpr double IMU_LEAD_S = 0.10;
+
 struct ImuRow {
   double t;
   Eigen::Vector3d w, a;
@@ -101,8 +104,12 @@ int main(int argc, char **argv) {
 
   size_t iidx = 0, n1 = 0, poses = 0;
   for (size_t k = 0; k < c0.size(); k++) {
-    // feed every IMU sample up to this frame first, so the propagator has what it needs
-    while (iidx < imu.size() && imu[iidx].t <= c0[k].t) {
+    // Feed IMU AHEAD of the frame, not just up to it. OpenVINS propagates across the interval
+    // ending at the image time and interpolates the bounding samples, so it needs measurements
+    // strictly beyond that timestamp; feeding only up to it leaves the update unable to complete
+    // and the filter runs open-loop. (In the ROS runners IMU arrives asynchronously and is always
+    // ahead, which is why this never shows up there.)
+    while (iidx < imu.size() && imu[iidx].t <= c0[k].t + IMU_LEAD_S) {
       ov_core::ImuData m;
       m.timestamp = imu[iidx].t;
       m.wm = imu[iidx].w;

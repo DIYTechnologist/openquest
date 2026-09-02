@@ -374,3 +374,52 @@ run a public EuRoC sequence through `euroc_runner` with the stock OpenVINS EuRoC
 tracks, the harness is sound and the fault is in our data despite the measurements; if it also
 drifts, `euroc_runner` is feeding OpenVINS incorrectly (a likely candidate: IMU is fed only up to
 each frame timestamp, when the propagator may need samples beyond it).
+
+## Synthetic ground-truth fixture, and two real harness bugs (2026-09-02)
+
+The ETH EuRoC host is unreachable from here, so instead of a public sequence
+`tools/vio/make_synthetic_euroc.py` generates one locally with exact ground truth: analytic
+trajectory, fixed point cloud, parallel stereo pinhole rig, and IMU derived from the same motion.
+
+**The generator is verified exact:** at rest the accelerometer reads `[0, 0, 9.807]`, and
+double-integrating the specific force reproduces the analytic trajectory to **1 mm over 20 s**.
+Images give 98% stereo KLT survival. So anything that fails on this is the harness or config.
+
+### Bug 1 — the capture procedure (affects real data)
+OpenVINS defaults to **static initialisation**: the device must sit still, then jerk into motion.
+Our first real capture had the headset already moving (the runner's lead-in told the wearer to
+start moving *before* recording). Static init then either never fires, or fires mid-motion and
+initialises with **zero velocity and gravity aligned to an accelerometer reading that already
+contains real acceleration**. That mis-initialisation alone explains the 800–1070 m drift.
+
+On the synthetic set this was reproduced exactly: a trajectory moving from t=0 gives
+`failed static init: no accel jerk detected` × 582 and **zero poses**. Adding a 2 s stationary
+period before motion made it initialise and track.
+
+**=> The next real capture must start stationary for ~2 s, then move.**
+
+### Bug 2 — `euroc_runner` fed IMU only up to each frame
+OpenVINS propagates across the interval *ending* at the image timestamp and interpolates the
+bounding samples, so it needs IMU strictly beyond that time. Feeding only up to it left the update
+unable to complete and the filter effectively open-loop. (In the ROS runners IMU arrives
+asynchronously and is always ahead, which is why upstream never hits this.) Fixed by feeding IMU
+to `frame_time + 0.10 s`; synthetic error halved, 116.9 m -> 60.1 m.
+
+### Where the synthetic test stands
+| stage | result vs 7.20 m ground truth |
+|---|---|
+| moving start, static init | 0 poses (never initialises) |
+| stationary start | 598 poses, 116.9 m |
+| + IMU fed ahead of frames | 598 poses, **60.1 m** |
+
+Similarity-aligned: scale 0.020 overall, 0.249 over the first 5 s, RMSE 0.617 m. The estimate has
+roughly the right shape but a scale error that grows — accumulating velocity error, i.e. the
+visual updates are still too weak to hold the IMU in check.
+
+**This is now a closed-loop test fixture**: the pipeline can be fixed with no device, no capture
+and no user, by iterating against a dataset whose answer is known. That is a much better position
+than tuning against a real capture we cannot validate.
+
+Remaining suspects, to work against the fixture: `max_slam` / `max_msckf_in_update` feature counts,
+`feat_rep_*` representations, whether `use_stereo` behaves with identity extrinsics, and whether
+the runner should feed IMU in a decoupled loop rather than in lockstep with frames.
