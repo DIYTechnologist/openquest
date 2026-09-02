@@ -254,3 +254,38 @@ a tracked trajectory. **The open VIO pipeline has never actually converged.**
 
 Recommendation: try (1) first because it is cheap and reuses everything; treat (2) as the likely
 end state for a 4-camera rig.
+
+## Option 1 attempted: rectification to a virtual parallel stereo pair (2026-09-02)
+
+`tools/vio/rectify_pair.py` rotates each camera by half the relative rotation so both virtual
+cameras share one orientation, and reprojects each fisheye into a virtual pinhole. Deliberately
+**not** classic rectification — the baseline is not rotated onto x, because Basalt does 2D patch
+tracking rather than scanline search, and skipping that keeps more field of view. Camera centres
+are untouched, so the baseline and metric scale are preserved.
+
+**The rectification itself is verified correct:**
+- relative rotation of the virtual pair: **0.000°** (was 19.6°); baseline preserved at 111.7 mm
+- epipolar error with the rectified calibration: **0.129° median, 463/501 SIFT inliers**
+- stereo disparity dropped from **103 px to 27.6 px** (mostly vertical, as expected)
+- OpenCV KLT tracks cam0→cam1 at **95% survival**, median 20.5 px
+
+**Effect on Basalt — real but insufficient:**
+
+| config | frames | max obs_cam1 | max connected | result |
+|---|---|---|---|---|
+| unrectified, stock | 42 | 0 | 0 | NaN |
+| rectified, stock | 14 | 2 | 0 | NaN |
+| rectified, `max_recovered_dist2` 2.0 | 61 | 3 | **73** | NaN |
+| rectified, dist2 2.0 + `epipolar_error` 0.02 | 61 | 4 | 63 | NaN |
+
+The key parameter was **`optical_flow_max_recovered_dist2` (default 0.04 = 0.2 px)** — an
+extremely tight forward/backward consistency gate that a genuine stereo viewpoint change cannot
+pass. Raising it took `connected` from 0 to ~75, i.e. landmarks are now created and re-observed
+and temporal tracking works. Neither pyramid levels (4/5/6), epipolar threshold (0.02–0.10),
+detection grid size, nor a fine IMU time sweep (±40 ms) moved it further.
+
+**`obs_cam1` stays at ~4 regardless**, even though SIFT finds 501 matches and KLT 95% on the same
+images with verified-correct geometry. That is a limitation of this Basalt version's stereo front
+end, not of our data or calibration — so option 1 has gone as far as it can.
+
+→ Proceeding to option 2: a VIO with real multi-camera support.
