@@ -136,6 +136,19 @@ a CLOCK_MONOTONIC stamp against the byte offset of every read of the syncboss st
 the nRF↔monotonic map be fitted *directly* rather than inferred by pairing two uniform 30 Hz
 sequences (which is degenerate under integer frame shifts). This removes the guesswork at source.
 
+### WHY the offset exists (resolved 2026-09-02)
+The `0xe0` exposure timestamps are **relative to camera-stream start**; the `0x50` IMU timestamps
+are on the **absolute MCU clock**. Evidence: the first `0xe0` timestamp is 33521 us = **1.006
+frame periods**, i.e. the strobe clock starts from zero the moment streaming begins. The offset is
+therefore the absolute MCU time at which `syncboss_camera_start_streaming()` ran — 816 ms here, of
+which ~329 ms is the three request/response round trips inside `syncboss_lib_start_streaming()`
+(each waits for an MCU reply).
+
+**Consequence: 816 ms is session-specific and must be measured per capture.** `CAM_SHIFT_MS`
+carries a warning to that effect. The `syncboss_chunks.csv` host timestamps that `cam_direct` now
+records are the clean way to pin it, since they relate the MCU clock to CLOCK_MONOTONIC directly
+rather than by pairing two uniform 30 Hz sequences.
+
 ### Also verified clean this session
 - **My PNG writer**: re-encoded the control's images with it — control still converges
   (42 poses, 0.3776 m). Encoder exonerated.

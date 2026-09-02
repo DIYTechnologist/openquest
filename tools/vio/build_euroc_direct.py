@@ -27,11 +27,20 @@ IMU_LEAD_NS = 500_000_000             # require this much IMU history before the
 # so all timestamps are the same width (the known-good EuRoC datasets are uniformly 14-15 digits).
 # Relative timing is untouched.
 TIME_BASE_NS = 100_000_000_000_000
-# Camera->IMU time offset, determined empirically by cross-correlating optical-flow magnitude
-# against gyro magnitude (tools/vio/cam_imu_lag.py): correlation rises from 0.38 at zero lag to
-# 0.95 at +816 ms. So the 0xe0 exposure stamps and the 0x50 IMU stamps do NOT share an epoch,
-# despite both being u32 microsecond fields in the same syncboss stream. This offset is ~24.5
-# frame periods, which is why the earlier +/-2 frame sweeps could never find it.
+# Camera->IMU time offset. !! THIS IS SESSION-SPECIFIC -- DO NOT REUSE 816 BLINDLY !!
+#
+# The 0xe0 exposure stamps are relative to CAMERA-STREAM START, while the 0x50 IMU stamps are on
+# the absolute MCU clock. Evidence: the very first 0xe0 timestamp is 33521 us = 1.006 frame
+# periods, i.e. the strobe clock starts at zero when streaming begins. So the offset equals
+# whenever syncboss_camera_start_streaming() happened in that session -- here 816 ms, of which
+# ~329 ms is the three request/response round trips inside syncboss_lib_start_streaming()
+# (set_frame_rate, set_frame_tag_mode, start_streaming), each waiting on an MCU reply.
+#
+# 816 ms was measured for exports/vio-direct-2026-09-01 by cross-correlating optical-flow
+# magnitude against gyro magnitude (0.380 correlation at zero lag -> 0.946 at 816 ms). A new
+# capture WILL have a different value. Measure it per capture -- ideally from the
+# syncboss_chunks.csv host timestamps that cam_direct now records, which pin the nRF<->monotonic
+# relation directly instead of inferring it.
 CAM_SHIFT_NS = int(os.environ.get('CAM_SHIFT_MS', '816')) * 1_000_000
 G, DEG = 9.80665, math.pi / 180.0
 
