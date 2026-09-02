@@ -37,6 +37,8 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <pthread.h>
+#include <poll.h>
+#include <errno.h>
 
 #define OCULUSHAL "/system/vendor/lib64/libqcameraoculushal.so"
 #define OUTDIR    "/data/local/tmp/camdirect"
@@ -610,21 +612,41 @@ static void *imu_thread(void *arg) {
   int out = *(int *)arg;
   unsigned char buf[65536];
   FILE *idx = fopen(OUTDIR "/syncboss_chunks.csv", "w");
-  if (idx) fprintf(idx, "#host_mono_ns,byte_offset,bytes\n");
+  if (!idx) { fprintf(stderr, "[-] cannot open syncboss_chunks.csv: %m\n"); return NULL; }
+  fprintf(idx, "#host_mono_ns,byte_offset,bytes\n");
   uint64_t off = 0;
+  // poll() rather than a blocking read(), so the thread notices g_imu_run going false and can be
+  // joined deterministically. A blocking read left the thread stuck at exit, which meant this
+  // stdio buffer was never flushed and the tail of syncboss.raw could be lost.
   while (g_imu_run) {
+    struct pollfd pfd = { .fd = sb_stream_fd, .events = POLLIN };
+    int pr = poll(&pfd, 1, 100);
+    if (pr <= 0) continue;
     ssize_t n = read(sb_stream_fd, buf, sizeof buf);
     if (n > 0) {
       uint64_t t = mono_ns();
-      if (write(out, buf, n) < 0) break;
-      if (idx) fprintf(idx, "%llu,%llu,%zd\n", (unsigned long long)t, (unsigned long long)off, n);
+      if (write(out, buf, n) != n) { fprintf(stderr, "[-] short write to syncboss.raw\n"); break; }
+      fprintf(idx, "%llu,%llu,%zd\n", (unsigned long long)t, (unsigned long long)off, n);
       off += (uint64_t)n;
-    } else {
-      usleep(500);
+    } else if (n < 0 && errno != EAGAIN && errno != EINTR) {
+      break;
     }
   }
-  if (idx) fclose(idx);
+  fflush(idx);
+  fclose(idx);
+  printf("[+] imu thread: %llu bytes of syncboss stream\n", (unsigned long long)off);
   return NULL;
+}
+
+// Stop (if started) and release every non-NULL sensor. Idempotent and NULL-safe so it can be
+// used from any exit path.
+static void release_sensors(void **sensors, int n) {
+  for (int k = 0; k < n; k++) {
+    if (!sensors[k]) continue;
+    if (*(uint32_t *)((unsigned char *)sensors[k] + 0x0c)) q.stop(sensors[k]);
+    q.release(sensors[k]);
+    sensors[k] = NULL;
+  }
 }
 
 static int stage_capture(void *hal, int camA, int camB, int seconds) {
@@ -638,9 +660,16 @@ static int stage_capture(void *hal, int camA, int camB, int seconds) {
   unsigned char cfg[28] = {0};
   ((uint32_t *)cfg)[0] = 112;
 
+  // Single teardown path: anything acquired here is stopped and released on EVERY exit, or
+  // qcamera_close later asserts "Cameras still in use!" and aborts, which would in turn skip
+  // the syncboss teardown in main() and leave the cameras powered.
   for (int k = 0; k < 2; k++) {
     sensors[k] = q.get_sensor(hal, cams[k]);
-    if (!sensors[k]) { printf("[-] cam %d acquire failed\n", cams[k]); return -1; }
+    if (!sensors[k]) {
+      printf("[-] cam %d acquire failed\n", cams[k]);
+      release_sensors(sensors, 2);
+      return -1;
+    }
     int rc = q.start(sensors[k], dim, cfg, 8, NULL, 1);
     printf("[%c] cam %d start rc=%d started=%u\n", rc ? '-' : '+', cams[k], rc,
            *(uint32_t *)((unsigned char *)sensors[k] + 0x0c));
@@ -648,11 +677,22 @@ static int stage_capture(void *hal, int camA, int camB, int seconds) {
 
   mkdir(OUTDIR, 0755);
   int raw = open(OUTDIR "/syncboss.raw", O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  printf("[%c] syncboss.raw fd=%d\n", raw < 0 ? '-' : '+', raw);
+  if (raw < 0) {                             // without the IMU the capture is useless — bail now
+    fprintf(stderr, "[-] cannot open syncboss.raw: %m\n");
+    release_sensors(sensors, 2);
+    return -1;
+  }
+  printf("[+] syncboss.raw fd=%d\n", raw);
   if (sb.imu_enable) printf("[*] syncboss_imu_enable rc=%d\n", sb.imu_enable(sb_handle));
 
   pthread_t th;
-  pthread_create(&th, NULL, imu_thread, &raw);
+  int perr = pthread_create(&th, NULL, imu_thread, &raw);
+  if (perr) {
+    fprintf(stderr, "[-] pthread_create failed: %s\n", strerror(perr));
+    close(raw);
+    release_sensors(sensors, 2);
+    return -1;
+  }
 
   syncboss_lib_start_streaming(4);
   usleep(300000);
@@ -689,15 +729,15 @@ static int stage_capture(void *hal, int camA, int camB, int seconds) {
     usleep(2000);
   }
   fclose(idx);
-  g_imu_run = 0;
   printf("[+] capture done: %d frames written over %d s\n", wrote, seconds);
 
-  for (int k = 0; k < 2; k++) {
-    if (*(uint32_t *)((unsigned char *)sensors[k] + 0x0c)) q.stop(sensors[k]);
-    q.release(sensors[k]);
-  }
-  usleep(200000);
+  // Join the IMU thread BEFORE closing its fd, so syncboss.raw and syncboss_chunks.csv are
+  // complete and flushed rather than truncated by process exit.
+  g_imu_run = 0;
+  pthread_join(th, NULL);
   close(raw);
+
+  release_sensors(sensors, 2);
   return 0;
 }
 
@@ -725,12 +765,17 @@ int main(int argc, char **argv) {
   // load /system/vendor/lib64?) WITHOUT touching /dev — safe to run with the HAL still up.
   if (!strcmp(stage, "probe")) { printf("\n[+] stage 0 (probe) OK — no hardware touched\n"); return 0; }
 
-  int n = 0;
+  int n = 0, rc = 0;
   void *hal = stage_enum(&n);
-  if (!hal) return 1;
-  if (cam >= n) { fprintf(stderr, "[-] cam %d >= num_sensors %d\n", cam, n); return 1; }
+  // Every exit from here on goes through `cleanup`: returning early would leave the cameras
+  // powered and the FSIN strobe running.
+  if (!hal) { rc = 1; goto cleanup; }
+  if (cam >= n) {
+    fprintf(stderr, "[-] cam %d >= num_sensors %d\n", cam, n);
+    rc = 1;
+    goto cleanup;
+  }
 
-  int rc = 0;
   if (!strcmp(stage, "capture")) {
     // argv: capture <camA> <seconds> <exposure> <gain> ; camB defaults to camA+2 (the pair
     // validated by the earlier 0.378 m trajectory, exports/vio-precise/trajectory_calib02.txt)
@@ -750,7 +795,8 @@ int main(int argc, char **argv) {
     }
   }
 
-  printf("[*] qcamera_close rc=%d\n", q.close(hal));
+cleanup:
+  if (hal) printf("[*] qcamera_close rc=%d\n", q.close(hal));
   syncboss_lib_stop();
   if (sb_fd >= 0) syncboss_cam_power(0);   // release the cameras and drop the streaming client
   printf("done.\n");

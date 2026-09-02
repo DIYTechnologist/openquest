@@ -65,7 +65,8 @@ echo "########## (start stage folded into stage 4)"
 
 echo
 echo "########## STAGE 4: all four cameras (6 rounds, exp=300 gain=100)"
-# cfg variant 4 (cam_format=42, mono8) is the one that returns rc=0.
+# cfg variant 8 (cam_format=112, fourcc 'GREY' mono8) is the one that returns rc=0.
+# (42 passes the range check but has no V4L2 mapping -> 'Unknown fmt=42' and no frames.)
 # Re-assert the HAL is down first: a stale watchdog can restart it mid-run.
 stop vendor.oculus.sensors-hal-1-0
 sleep 2

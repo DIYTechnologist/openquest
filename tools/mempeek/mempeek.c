@@ -47,7 +47,8 @@ static void load_maps(const char *pid) {
     if (!f) die("open maps");
     char line[1024];
     while (fgets(line, sizeof line, f)) {
-        uint64_t s, e; char perms[8]; uint64_t off; unsigned long devmaj, devmin; unsigned ino;
+        uint64_t s, e; char perms[8]; uint64_t off; unsigned long devmaj, devmin; unsigned long ino;  // %lu writes 8 bytes on LP64 --
+                                                          // an `unsigned` here corrupted the stack
         char name[512] = {0};
         int n = sscanf(line, "%lx-%lx %4s %lx %lx:%lx %lu %511[^\n]",
                        &s, &e, perms, &off, &devmaj, &devmin, &ino, name);

@@ -188,17 +188,13 @@ def main(cap, out):
             paired.append((ts, pa, b_list[best][1]))
     print(f"stereo pairs within {PAIR_TOL_NS/1e6:.0f} ms: {len(paired)} "
           f"(from {len(a_list)}/{len(b_list)})")
-    per_cam[cams[0]] = [(t, pa) for t, pa, _ in paired]
-    per_cam[cams[1]] = [(t, pb) for t, _, pb in paired]
-
-    # Basalt integrates IMU between frames, so it needs IMU samples covering (and preceding) the
-    # first frame. In this capture the cameras began 0.75 s BEFORE the first IMU sample — the MCU
-    # starts the FSIN strobe before the IMU stream comes up — and that made the filter diverge to
-    # NaN. Drop frames until the IMU has been running for IMU_LEAD_NS. (The known-good
-    # exports/vio-precise dataset happened to have 6.2 s of IMU lead.)
-    # snap each frame to the nearest exposure packet (KOFF shifts the frame<->strobe pairing)
+    # Keep the PAIRED structure from here on. Snapping, dedup and the IMU-lead trim used to be
+    # applied to each camera independently, which happened to leave equal-length lists for this
+    # capture but could silently diverge on another one — and Basalt pairs stereo frames by exact
+    # timestamp, so divergence would be near-impossible to spot. One list, one timestamp per pair.
     KOFF = int(os.environ.get('KOFF', '0'))
     exp_ns = [t * 1000 + TIME_BASE_NS + CAM_SHIFT_NS for t in exp_us]
+
     def snap(ts_mono):
         nrf_est = (ts_mono - b) / a
         j = bisect.bisect_left(exp_us, nrf_est)
@@ -213,31 +209,34 @@ def main(cap, out):
         k = best + KOFF
         return exp_ns[k] if 0 <= k < len(exp_ns) else None
 
-    snapped = {}
-    for c in cams[:2]:
-        out_l = []
-        for ts, p_ in per_cam[c]:
-            e = snap(ts)
-            if e is not None:
-                out_l.append((e, p_))
-        snapped[c] = out_l
-    # Two frames can snap onto the same strobe (our dequeue occasionally returns a stale buffer);
-    # keep the first and drop the duplicate so timestamps stay strictly increasing.
-    for c in cams[:2]:
-        seen, uniq = set(), []
-        for t, p_ in snapped[c]:
-            if t not in seen:
-                seen.add(t); uniq.append((t, p_))
-        snapped[c] = uniq
-    per_cam.update(snapped)
-    # Basalt needs IMU history covering the first frame; the strobe starts before the IMU stream.
+    # Basalt needs IMU history covering the first frame; the FSIN strobe starts before the IMU
+    # stream comes up, so frames without preceding IMU are unusable and get dropped.
     cut = imu_us[0] * 1000 + TIME_BASE_NS + IMU_LEAD_NS
-    before = len(per_cam[cams[0]])
-    for c in cams[:2]:
-        per_cam[c] = [(t, p_) for t, p_ in per_cam[c] if t >= cut]
-    print(f"snapped to 0xe0 exposure times (KOFF={KOFF}); dropped "
-          f"{before - len(per_cam[cams[0]])} frame(s) lacking {IMU_LEAD_NS/1e9:.2f}s IMU lead; "
-          f"cam0={len(per_cam[cams[0]])} cam1={len(per_cam[cams[1]])}")
+    snapped, seen, dropped_lead, dropped_dup = [], set(), 0, 0
+    for ts, pa, pb in paired:
+        e = snap(ts)                       # one snap per PAIR, so both cameras get one timestamp
+        if e is None:
+            continue
+        if e < cut:
+            dropped_lead += 1
+            continue
+        if e in seen:                      # a stale buffer can land two frames on one strobe
+            dropped_dup += 1
+            continue
+        seen.add(e)
+        snapped.append((e, pa, pb))
+    snapped.sort()
+    print(f"snapped to 0xe0 exposure times (KOFF={KOFF}, cam shift {CAM_SHIFT_NS/1e6:.0f} ms); "
+          f"dropped {dropped_lead} lacking {IMU_LEAD_NS/1e9:.2f}s IMU lead, {dropped_dup} duplicate; "
+          f"{len(snapped)} stereo pairs")
+    per_cam[cams[0]] = [(t, pa) for t, pa, _ in snapped]
+    per_cam[cams[1]] = [(t, pb) for t, _, pb in snapped]
+
+    # Invariant Basalt depends on: identical, strictly increasing timestamps in both cameras.
+    ts0 = [t for t, _ in per_cam[cams[0]]]
+    ts1 = [t for t, _ in per_cam[cams[1]]]
+    assert ts0 == ts1, "cam0/cam1 timestamp lists diverged"
+    assert all(y > x for x, y in zip(ts0, ts0[1:])), "timestamps not strictly increasing"
 
     for idx, c in enumerate(cams[:2]):
         dd = os.path.join(out, 'mav0', f'cam{idx}', 'data')

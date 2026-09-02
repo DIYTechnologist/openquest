@@ -433,8 +433,10 @@ Raw data: `exports/vio-direct-2026-09-01/` (907 MB, 3010 frames + `syncboss.raw`
 - Several `qcamera_*` functions return **void** — the "rc" is garbage; judge by out-params.
 - `qcamera_start_sensor` adds the meta row itself: pass the **640×480** dims, not 640×481, or
   the sensor comes up 640×482.
-- The 28-byte cfg only needs `cfg[0] = 42` (cam_format mono8). `p4` can be **NULL** — the lib
-  allocates its own buffers (`+0x50`/`+0x58` get populated).
+- The 28-byte cfg only needs `cfg[0] = 112` (cam_format for fourcc `'GREY'` mono8; **not** 42 —
+  42 passes `mm_stream_calc_offset_raw`'s range check but has no V4L2 mapping, giving
+  `Unknown fmt=42` and no frames). `p4` can be **NULL** — the lib allocates its own buffers
+  (`+0x50`/`+0x58` get populated).
 
 ### Earlier stages (superseded by the live result above)
 Stage 1 `enum` already touches hardware: `qcamera_open` → `control_init` opens `/dev/media*`,

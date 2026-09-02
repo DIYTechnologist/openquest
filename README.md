@@ -20,7 +20,9 @@ Reverse-engineering and tooling to replace Meta's proprietary VR blobs with an o
 | Cross-compile toolchain (NDK + AOSP headers + `__1` ABI fix) | ✅ |
 | `hidl-gen` built from source; `ISensorClient` bindings generated | ✅ |
 | IMU FMQ streaming client reaches the HAL over binder | ✅ (real transaction) |
-| First IMU frame | ⏳ needs exact `sizeof(ImuData)` + `FmqConfig` (see notes/07) |
+| First IMU frame | ✅ superseded — the HIDL client was abandoned; IMU now comes straight from the open `oculus_syncboss` kernel FIFO at ~994 Hz (notes/08) |
+| Open camera stack (cameras + IMU driven from our own process, no trackingservice) | ✅ notes/11 |
+| Basalt VIO on an open-stack capture | ⏳ dataset builds cleanly but the filter diverges (notes/12) |
 
 ## Layout
 

@@ -1,17 +1,35 @@
 # QWEN.md — live handoff note (read first)
 
-Date: 2026-08-31. Device: `1PASH9ACHD0215` / `monterey` (Quest 1, msm8998), Magisk root.
+Date: 2026-09-02. Device: `1PASH9ACHD0215` / `monterey` (Quest 1, msm8998), Magisk root.
 Goal: open VR stack (Monado/Basalt) fed by 4× OV7251 tracking cams + ICM-20602 IMU,
 replacing Meta's closed blobs.
 
-## The two options (current framing)
+## CURRENT STATE (supersedes "the two options" framing below)
+
+**Both cameras and IMU are now driven from our own process** — no HIDL, no trackingservice.
+See `notes/11-camera-kernel-path-probe.md`. In short:
+- IMU: open `oculus_syncboss` kernel FIFO, ~994 Hz, enabled with `syncboss_imu_enable()`.
+- Cameras: dlopen the thin plain-C vendor stack (`libqcameraoculushal.so` ->
+  `libqcameradriver.so`) plus `libsyncboss.so` for the MCU. 4× 640x481 mono8, FSIN-synced.
+  `cam_format` = **112**; `set_frame_rate` takes a PERIOD in us (33333);
+  `syncboss_camera_start_streaming` must run AFTER the v4l2 pipeline is up.
+- Requires `trackingservice`, the Android framework AND the sensors HAL stopped
+  (`/dev/video0` is single-open). Always restore afterwards.
+
+Open item: Basalt diverges on the first open-stack capture even though every input has been
+validated independently — see `notes/12-first-open-vio-capture.md` for the elimination table,
+the ~816 ms camera<->IMU offset that analysis uncovered, and the next steps.
+
+## The two options (HISTORICAL framing — Option 2 was abandoned; Option 1 was superseded)
 
 - **Option 1 — syncboss-direct**: read raw IMU from the open `oculus_syncboss` kernel
   driver (`/dev/syncboss_stream0`, miscfifo, fans out to every reader). Proven: live
   ~30 Hz broadcast packets readable as root (20-byte `01 03 00 e0 00 0e 00` header +
-  ts32 + ctr16 + seq8). Missing: the 1 kHz IMU is *not* in the broadcast — it must be
-  enabled via `/dev/syncboss_control0` (wire protocol RE needed). Gives raw IMU only —
-  **no cameras** (those are MIPI/CSI through the camera pipeline).
+  ts32 + ctr16 + seq8). ~~Missing: the 1 kHz IMU is not in the broadcast~~ — **resolved**:
+  `syncboss_imu_enable()` in `libsyncboss.so` (MCU message type 110) turns it on, and we now
+  read 994 Hz IMU directly. ~~Gives raw IMU only, no cameras~~ — **also resolved**: the same
+  library drives camera power and the FSIN strobe (types 40/41/44), so this path now yields
+  cameras too.
 - **Option 2 — beat the closed HAL** (`vendor.oculus.hardware.sensors@1.0-service`):
   our open `ISensorClient` + FMQ client is proven byte-identical to Meta's own
   `trackingservice` client (LD_PRELOAD intercept captured the real recipe:
