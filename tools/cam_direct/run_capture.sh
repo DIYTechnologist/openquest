@@ -32,12 +32,20 @@ if [ -n "$(pidof vendor.oculus.hardware.sensors@1.0-service)" ]; then
 fi
 echo "--- services down at $(date)"
 
-# Lead-in so the headset can be put on and moving before frames start.
-echo "--- LEAD-IN 20s: put the headset on and start looking around"
+# Lead-in: get the headset ON and then HELD STILL before recording starts.
+#
+# This used to say "start looking around", which was wrong and cost us a whole capture. VIO
+# initialisation (OpenVINS static init, and most others) requires the device to be stationary and
+# then move off. Starting already in motion makes the filter initialise with zero velocity and
+# gravity aligned to an accelerometer reading that contains real acceleration -- it then diverges,
+# which is exactly what our first capture did. See notes/12.
+echo "--- LEAD-IN 20s: put the headset on, then HOLD STILL (do not move yet)"
 sleep 20
 
-echo "--- CAPTURE START $(date)"
-/data/local/tmp/cam_direct capture 0 25 8000 255
+echo "--- CAPTURE START $(date) -- HOLD STILL for the first 4 s, THEN move"
+# The first seconds must be stationary so the estimator can initialise; after that, translate
+# (step side to side, lean in/out) rather than only rotating -- pure rotation gives no parallax.
+/data/local/tmp/cam_direct capture 0 30 8000 255
 echo "exit=$?"
 echo "--- CAPTURE END $(date)"
 
