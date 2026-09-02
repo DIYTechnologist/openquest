@@ -1,0 +1,12 @@
+FROM openvins:base
+# Instrumented build: adds per-update feature-cull counters to UpdaterMSCKF, then rebuilds only
+# ov_msckf_lib incrementally (the CMake tree in /build is preserved in the base image).
+COPY msckf_counters.patch.sh /src/msckf_counters.patch.sh
+RUN sh /src/msckf_counters.patch.sh && make -C /build/ov_msckf ov_msckf_lib -j"$(nproc)"
+COPY euroc_runner.cpp /src/euroc_runner.cpp
+RUN g++ -O2 -std=c++17 -o /usr/local/bin/euroc_runner /src/euroc_runner.cpp \
+      -I/open_vins/ov_msckf/src -I/open_vins/ov_core/src -I/open_vins/ov_init/src \
+      -I/usr/include/eigen3 $(pkg-config --cflags opencv4) \
+      -L/build/ov_msckf -L/build/ov_core -L/build/ov_init \
+      -lov_msckf_lib -lov_init_lib -lov_core_lib \
+      $(pkg-config --libs opencv4) -lboost_system -lboost_filesystem -lceres -lpthread

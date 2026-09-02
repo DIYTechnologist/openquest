@@ -24,6 +24,7 @@
 #include "core/VioManager.h"
 #include "core/VioManagerOptions.h"
 #include "state/State.h"
+#include "utils/print.h"
 #include "utils/sensor_data.h"
 
 using namespace ov_msckf;
@@ -89,6 +90,15 @@ int main(int argc, char **argv) {
   VioManagerOptions params;
   params.print_and_load(parser);
   params.num_opencv_threads = 1;
+  // print_and_load does NOT apply the verbosity it parsed -- the ROS runners call this themselves,
+  // so without it the level stays at INFO and every PRINT_DEBUG (the [TIME] lines carrying the
+  // MSCKF/SLAM feature counts) is silently dropped. That gap made a run with no visual updates
+  // look identical to one with them.
+  {
+    std::string verbosity = "INFO";
+    parser->parse_config("verbosity", verbosity, false);
+    ov_core::Printer::setPrintLevel(verbosity);
+  }
   auto sys = std::make_shared<VioManager>(params);
 
   auto imu = load_imu(dataset + "/mav0/imu0/data.csv");
@@ -127,8 +137,10 @@ int main(int argc, char **argv) {
     cam.images.push_back(i0);
     cam.masks.push_back(cv::Mat::zeros(i0.rows, i0.cols, CV_8UC1));
 
-    // pair with cam1 by exact timestamp; the builder guarantees identical stamps
-    if (n1 < c1.size()) {
+    // pair with cam1 by exact timestamp; the builder guarantees identical stamps.
+    // Only when the config actually declares 2 cameras -- feeding a cam1 image with
+    // max_cameras:1 throws std::out_of_range deep inside the tracker.
+    if (params.state_options.num_cameras > 1 && n1 < c1.size()) {
       while (n1 + 1 < c1.size() && c1[n1].t < c0[k].t - 1e-6) n1++;
       if (std::abs(c1[n1].t - c0[k].t) < 1e-6) {
         cv::Mat i1 = cv::imread(dataset + "/mav0/cam1/data/" + c1[n1].file, cv::IMREAD_GRAYSCALE);
@@ -152,7 +164,9 @@ int main(int argc, char **argv) {
     }
     if (k % 100 == 0)
       std::cout << "frame " << k << "/" << c0.size() << " initialized=" << sys->initialized()
-                << " poses=" << poses << std::endl;
+                << " poses=" << poses
+                << " msckf_feats=" << sys->get_good_features_MSCKF().size()
+                << " slam_feats=" << sys->get_features_SLAM().size() << std::endl;
   }
   std::cout << "done: wrote " << poses << " poses to " << out_path << std::endl;
   return 0;

@@ -1,5 +1,15 @@
 # CHECKPOINT — open VIO (resume file), 2026-09-02
 
+> **SUPERSEDED 2026-09-03 — the blocker is found and fixed; VIO converges on real data.**
+> Root cause: the builder fed RAW IMU axes while the camera extrinsics are in the *rectified* IMU
+> body frame (~180° apart). Reference capture went **1246 m → 0.56 m**, reproduced on a second
+> capture (269.55 m → 0.41 m). Read **`notes/14-imu-frame-rectification.md`** instead of the
+> "what does not work" and "Next steps" sections below, both of which are now wrong: the planned
+> bisection into scene depth / motion blur / rolling shutter was aimed at the wrong target, and a
+> fixture could never have found this because it generates IMU data in the correct frame by
+> construction. The STANDING RULES, the camera/IMU stack description and the traps list all still
+> hold.
+
 Read this first on resume. Project goal: replace Meta's VR blobs on a rooted Quest 1 (`monterey`,
 msm8998) with an open stack. Previous checkpoint: `notes/10-CHECKPOINT-camera-tap.md` (superseded
 for the camera work). Full detail: `notes/11-camera-kernel-path-probe.md` (how the cameras are
@@ -35,8 +45,10 @@ carried. Excitation 0.030–0.088 m/s² still → 1.7–6.8 moving (~50× step).
 [0,0,9.807] at rest; double integration reproduces the trajectory to 1 mm over 20 s).
 
 ## STATE: what does not work
-**No VIO has produced a valid trajectory from real data.** OpenVINS initialises on the reference
-capture (698 poses) but drifts ~500 m over 23 s. Basalt cannot match the camera pair at all.
+~~**No VIO has produced a valid trajectory from real data.** OpenVINS initialises on the reference
+capture (698 poses) but drifts ~500 m over 23 s.~~ **Fixed — see `notes/14`.** The drift was the
+raw-vs-rectified IMU frame mismatch, not a VIO or calibration quality problem. Basalt still cannot
+match the divergent camera pair, but that is no longer on the critical path.
 
 **Important correction:** `notes/08`'s "0.378 m trajectory" was never a converged result — it shows
 zero stereo observations and runs out of data just before diverging. Do not treat it as a baseline.
@@ -70,14 +82,22 @@ real camera→IMU rotation 6.15 ✓, **full real extrinsics (19.6° divergent pa
 Timing swept 0–120 ms: no coherent optimum.
 
 ### Next steps
-1. **Continue the bisection into the unmodelled differences**: real scene depth distribution,
-   motion blur, rolling shutter, the alternating-exposure frame selection, sensor imperfections
-   beyond white noise + constant bias. Whichever reproduces ~500 m is the cause. All offline.
-2. If the divergent pair proves decisive, the rig may simply need a VIO built for non-overlapping
-   multi-camera rigs, or per-camera mono-inertial fusion.
-3. Only then consider another capture.
+~~Continue the bisection into the unmodelled differences (scene depth, motion blur, rolling
+shutter…)~~ — **abandoned, wrong target.** See `notes/14`. Current next steps:
+1. Get a ground-truth reference for accuracy (the two converged runs are plausibility-checked
+   only: bounded drift, correct lift-off signature, sane speeds — no error number).
+2. Real-time pipeline → Monado integration.
+3. Revisit the divergent-pair / 4-camera question, which is now an accuracy question rather than a
+   convergence one.
 
 ## Traps that have already cost time
+- **A fixture cannot find a bug in a stage it does not model.** The synthetic fixture generates IMU
+  data in the correct frame by construction, so it could never reproduce the raw-vs-rectified
+  mismatch that was the actual blocker — and the plan to keep making it more realistic would never
+  have converged. See `notes/14`.
+- **OpenVINS will not tell you it is doing zero visual updates** unless the runner applies the
+  config's verbosity (`Printer::setPrintLevel`, which `print_and_load` does *not* call). Fixed in
+  `euroc_runner.cpp`; `openvins:dbg` reports per-update feature survival.
 - **The fixture has twice manufactured plausible false findings**: identical landmark patches (KLT
   matched wrong blobs), and a frontal-only scene (real camera rotation → 7 features instead of
   300, which looked exactly like an extrinsics bug). Always check feature counts and look at a

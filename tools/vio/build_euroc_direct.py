@@ -47,6 +47,33 @@ TIME_BASE_NS = int(os.environ.get('TIME_BASE_NS', 100_000_000_000))
 CAM_SHIFT_NS = int(os.environ.get('CAM_SHIFT_MS', '816')) * 1_000_000
 G, DEG = 9.80665, math.pi / 180.0
 
+# ---------------------------------------------------------------- IMU rectification (notes/14)
+# The syncboss FIFO delivers RAW sensor-frame gyro/accel. The factory calibration carries a
+# per-sensor RectificationMatrix that maps raw axes into the IMU *body* frame, and it is very
+# nearly a 180 deg rotation:  body ~ (-y, -x, -z) of raw.  Every camera->IMU extrinsic we export
+# is expressed in that body frame, so feeding raw samples puts the IMU and the cameras ~180 deg
+# apart. Nothing static catches it: gyro and accel stay mutually consistent (both raw, and their
+# rectifications are nearly identical), so the accelerometer still reads a clean 1 g at rest and
+# gyro-vs-accel attitude closure still passes. Only the camera<->IMU relation is broken, which
+# makes every visual update inconsistent with propagation -> triangulation fails, chi2 rejects
+# the survivors, and the filter silently dead-reckons. That was the whole ~600 m drift.
+#
+# Verified against this capture: rotating the gyro into the camera frame and comparing with the
+# rotation measured from the images gives a median axis error of 9 deg rectified vs 101 deg raw.
+# Offset convention is Rect @ (raw - Offset): it takes the still-period rate from 0.0562 to
+# 0.0116 rad/s, while Rect@raw - Offset makes it worse (0.0961).
+IMU_RECT = os.environ.get('IMU_RECT', '1') != '0'
+
+
+def load_imu_rect(calib_path):
+    """-> (R_gyro, off_gyro, R_accel, off_accel) from the factory intermediate.json."""
+    import json
+    c = json.load(open(calib_path))['imu']
+    return (np.array(c['gyroscope']['RectificationMatrix'], float).reshape(3, 3),
+            np.array(c['gyroscope']['Offset']['ConstantOffset'], float),
+            np.array(c['accelerometer']['RectificationMatrix'], float).reshape(3, 3),
+            np.array(c['accelerometer']['Offset']['OffsetAtZeroDegC'], float))
+
 
 FLIP = os.environ.get('FLIP', '')      # 'v', 'h', or 'vh' — the v4l2 path may deliver rows in a
                                        # different order than the ImageBuffer path the calibration
@@ -364,12 +391,30 @@ def main(cap, out):
                 f.write(f'{ts},{ts}.png\n')
         print(f"wrote cam{idx} ({len(per_cam[c])} png) from source cam{c}")
 
+    rect = None
+    if IMU_RECT:
+        calib_path = os.environ.get(
+            'IMU_CALIB', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..',
+                                      'exports', 'calibration-2026-08-30', 'openvr_calib_out',
+                                      'intermediate.json'))
+        if os.path.exists(calib_path):
+            rect = load_imu_rect(calib_path)
+            print(f"imu0: applying factory rectification from {calib_path}")
+        else:
+            print(f"imu0: WARNING no factory calibration at {calib_path}; writing RAW IMU axes. "
+                  f"The camera extrinsics are in the rectified body frame, so VIO will not "
+                  f"converge -- see the IMU_RECT note above.")
+
     os.makedirs(os.path.join(out, 'mav0', 'imu0'), exist_ok=True)
     with open(os.path.join(out, 'mav0', 'imu0', 'data.csv'), 'w') as f:
         f.write('#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z\n')
         for us, g, acc in zip(imu_us, [s[1] for s in imu], [s[2] for s in imu]):
             ts_ns = (int(chunk_fits[0x50][0]*us + chunk_fits[0x50][1])
                      if 0x50 in chunk_fits else us * 1000 + TIME_BASE_NS)
+            if rect is not None:
+                Rg, og, Ra, oa = rect
+                g = Rg @ (np.asarray(g, float) - og)
+                acc = Ra @ (np.asarray(acc, float) - oa)
             f.write('%d,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n'
                     % (ts_ns, g[0], g[1], g[2], acc[0], acc[1], acc[2]))
     print(f"wrote imu0 ({len(imu_us)} samples)")

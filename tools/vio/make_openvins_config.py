@@ -65,13 +65,17 @@ def main(calib, a, b, out_dir, template_dir):
             f.write(f"  resolution: [{res[0]}, {res[1]}]\n")
             f.write(f"  rostopic: /cam{idx}/image_raw\n")
 
-    # IMU: ICM-20602 at ~1 kHz. Noise densities taken from the Basalt calibration, converted from
-    # per-sample sigma to continuous-time density (sigma * sqrt(dt)).
+    # IMU noise, MEASURED from the 16 s stationary segment of exports/vio-table2-2026-09-02 by
+    # Allan deviation (N = sigma_ad(tau) * sqrt(tau) on the white-noise slope). The previous values
+    # were carried over from a Basalt config and understated the real sensor by 21x (gyro) and
+    # 4.6x (accel), which makes the filter over-confident in propagation. That was NOT what broke
+    # VIO here -- the IMU frame mismatch was (notes/14) -- but over-confident noise is still wrong
+    # and would bite during tuning, so these are the measured numbers.
     rate = 1000.0
-    acc_n = 0.016 / math.sqrt(rate)
-    gyr_n = 0.000282 / math.sqrt(rate)
-    acc_w = 0.001 * math.sqrt(rate) / rate
-    gyr_w = 0.0001 * math.sqrt(rate) / rate
+    acc_n = 2.31e-03           # m/s^2/sqrt(Hz)   (was 5.06e-04)
+    gyr_n = 1.85e-04           # rad/s/sqrt(Hz)   (was 8.92e-06)
+    acc_w = 1.0e-04
+    gyr_w = 1.0e-05
     with open(os.path.join(out_dir, 'kalibr_imu_chain.yaml'), 'w') as f:
         f.write("%YAML:1.0\nimu0:\n  T_i_b:\n" + mat_yaml(np.eye(4)) + "\n")
         f.write(f"  accelerometer_noise_density: {acc_n:.6g}\n")
@@ -107,7 +111,11 @@ def main(calib, a, b, out_dir, template_dir):
         # Accelerometer check inside static init: older half must be below this, newer half above.
         # Measured 0.125 m/s^2 still on the head; the first moving window is ~0.85. 0.3 separates
         # them with margin at the onset of motion, which is where the jerk is detected.
-        'init_imu_thresh': 'init_imu_thresh: %s' % os.environ.get('OV_IMU_THRESH', '1.5'),
+        # 1.5 is the OpenVINS default and is ~50x this IMU's stationary accel variance (~0.03), so
+        # the "old window must be stationary" guard in StaticInitializer never fires: it accepts a
+        # window straddling the pickup and takes the gyro bias from it (1.75 deg/s error here, vs
+        # 0.02 with 0.3). Harmless once the frame fix is in, but wrong. See notes/14.
+        'init_imu_thresh': 'init_imu_thresh: %s' % os.environ.get('OV_IMU_THRESH', '0.3'),
         # OpenVINS picks static vs dynamic init by comparing image disparity against this. Our
         # captures run ~10 px, so a threshold of 10-15 classifies real motion as "stationary" and
         # forces the static path forever. Set it well below the observed disparity.

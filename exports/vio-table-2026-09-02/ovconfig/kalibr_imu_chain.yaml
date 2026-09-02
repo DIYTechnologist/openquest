@@ -1,0 +1,35 @@
+%YAML:1.0
+imu0:
+  T_i_b:
+    - [1, 0, 0, 0]
+    - [0, 1, 0, 0]
+    - [0, 0, 1, 0]
+    - [0, 0, 0, 1]
+  accelerometer_noise_density: 2.31e-03
+  accelerometer_random_walk: 1.0e-04
+  gyroscope_noise_density: 1.85e-04
+  gyroscope_random_walk: 1.0e-05
+  rostopic: /imu0
+  time_offset: 0.0
+  update_rate: 1000.0
+  model: "calibrated"
+  Tw:
+    - [1, 0, 0]
+    - [0, 1, 0]
+    - [0, 0, 1]
+  R_IMUtoGYRO:
+    - [1, 0, 0]
+    - [0, 1, 0]
+    - [0, 0, 1]
+  Ta:
+    - [1, 0, 0]
+    - [0, 1, 0]
+    - [0, 0, 1]
+  R_IMUtoACC:
+    - [1, 0, 0]
+    - [0, 1, 0]
+    - [0, 0, 1]
+  Tg:
+    - [0, 0, 0]
+    - [0, 0, 0]
+    - [0, 0, 0]
