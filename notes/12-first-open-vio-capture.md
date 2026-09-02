@@ -423,3 +423,35 @@ than tuning against a real capture we cannot validate.
 Remaining suspects, to work against the fixture: `max_slam` / `max_msckf_in_update` feature counts,
 `feat_rep_*` representations, whether `use_stereo` behaves with identity extrinsics, and whether
 the runner should feed IMU in a decoupled loop rather than in lockstep with frames.
+
+## PIPELINE VALIDATED (2026-09-02)
+
+With the fixture corrected, **OpenVINS tracks it with correct metric scale**:
+
+| metric | result |
+|---|---|
+| estimated path | **7.13 m** vs 6.95 m ground truth (3%) |
+| ATE RMSE (rigid/metric alignment, 601 poses) | 0.653 m over a 1.60 m extent |
+| error over time | 0.55 → 0.44 → 1.00 → 0.68 m — **bounded, not diverging** |
+
+So the harness, config generator, calibration path and runner are all sound. The remaining drift is
+tuning-level (feature counts, noise parameters), not structural.
+
+### The third bug was in the fixture itself
+Every landmark rendered as an identical circle, so KLT could match one blob onto a *different*
+blob, report success, and hand the estimator confidently wrong correspondences. Replacing them
+with a distinct random patch per landmark took the result from 65.4 m to 7.13 m. Worth recording
+as a general lesson: a synthetic fixture has to be locally distinctive or it validates nothing —
+and it silently produced a plausible-looking failure that could easily have been blamed on the
+estimator. Real imagery does not have this problem, so this flaw never affected our real capture.
+
+### Consequence for the real data
+Re-running the real capture through the fixed harness still gives 1626 m. That is expected and
+consistent: it begins already in motion, so static init fires mid-motion with zero velocity and a
+mis-aligned gravity. **The capture procedure is now the only known blocker**, and
+`tools/cam_direct/run_capture.sh` has been corrected to hold still first.
+
+Order of the three bugs found, all of which had to be fixed before anything worked:
+1. capture began in motion (procedure — affects real data only)
+2. `euroc_runner` fed IMU only up to each frame (harness)
+3. fixture landmarks were indistinguishable (test rig only)

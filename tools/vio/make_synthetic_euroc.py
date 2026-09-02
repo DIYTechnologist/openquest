@@ -35,6 +35,7 @@ def euler_R(yaw, pitch, roll):
 
 
 STILL_S = 2.0          # stationary period before motion starts
+CAM_START_S = 0.5      # IMU lead before the first camera frame
 
 
 def ramp(t):
@@ -80,36 +81,59 @@ def omega_body(t, h=1e-4):
     return axis * ang / h
 
 
-def render(P_world, p, R, cam_offset, rng):
-    """Project the cloud into one camera and splat blobs so KLT has something to track."""
-    img = np.full((H, W), 12, np.uint8)
+PATCH = 7      # side of the per-landmark appearance patch
+
+
+def make_patches(n, rng):
+    """A distinct random patch per landmark.
+
+    Identical circles were a real flaw in an earlier version of this fixture: every landmark looked
+    the same, so KLT could match one blob onto a different blob, report success, and hand the
+    estimator confidently WRONG correspondences. Real scenes are locally distinctive; the fixture
+    has to be too, or it validates nothing.
+    """
+    p = rng.integers(40, 255, size=(n, PATCH, PATCH)).astype(np.float32)
+    return [cv2.GaussianBlur(x, (3, 3), 0) for x in p]
+
+
+def render(P_world, p, R, cam_offset, rng, patches):
+    """Project the cloud into one camera, splatting each landmark's own patch."""
+    img = np.full((H, W), 12, np.float32)
     C = p + R @ cam_offset                      # camera centre in world
     pc = (R.T @ (P_world - C).T).T              # camera frame (camera axes == body axes)
     z = pc[:, 2]
-    ok = z > 0.4
-    u = FOCAL * pc[ok, 0] / z[ok] + W/2
-    v = FOCAL * pc[ok, 1] / z[ok] + H/2
-    inb = (u > 6) & (u < W-6) & (v > 6) & (v < H-6)
-    for uu, vv, zz in zip(u[inb], v[inb], z[ok][inb]):
-        r = max(1, int(round(2.5 * min(3.0, 3.0/zz))))
-        cv2.circle(img, (int(round(uu)), int(round(vv))), r, int(200 + 40*rng.random()), -1)
+    idx = np.nonzero(z > 0.4)[0]
+    u = FOCAL * pc[idx, 0] / z[idx] + W/2
+    v = FOCAL * pc[idx, 1] / z[idx] + H/2
+    h = PATCH // 2
+    for j, uu, vv in zip(idx, u, v):
+        cu, cv_ = int(round(uu)), int(round(vv))
+        if cu < h or cu >= W-h or cv_ < h or cv_ >= H-h:
+            continue
+        sl = (slice(cv_-h, cv_+h+1), slice(cu-h, cu+h+1))
+        img[sl] = np.maximum(img[sl], patches[j])
     img = cv2.GaussianBlur(img, (3, 3), 0)
-    return cv2.add(img, (rng.normal(0, 2, (H, W))).astype(np.int16).clip(-20, 20).astype(np.uint8))
+    img += rng.normal(0, 1.5, (H, W))
+    return np.clip(img, 0, 255).astype(np.uint8)
 
 
 def main(out, seconds, cam_hz, imu_hz):
     rng = np.random.default_rng(7)
     # a cloud spread in depth so there is real parallax, not a plane
     P = np.column_stack([rng.uniform(-6, 6, 900), rng.uniform(-4, 4, 900), rng.uniform(2, 12, 900)])
+    patches = make_patches(len(P), rng)
 
     for c in ('cam0', 'cam1'):
         os.makedirs(f'{out}/mav0/{c}/data', exist_ok=True)
     os.makedirs(f'{out}/mav0/imu0', exist_ok=True)
 
-    # IMU
+    # IMU. Generated to run PAST the last camera frame: the estimator propagates across the
+    # interval ending at each image time and interpolates the bounding samples, so a frame with no
+    # IMU after it produces "No IMU measurements to propagate with ... IMU-CAMERA are likely
+    # messed up". Cameras start at CAM_START_S and run `seconds`, so the IMU covers a margin beyond.
     with open(f'{out}/mav0/imu0/data.csv', 'w') as f:
         f.write('#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z\n')
-        n = int(seconds * imu_hz)
+        n = int((seconds + CAM_START_S + 1.0) * imu_hz)
         for k in range(n):
             t = k / imu_hz
             _, R = pose(t)
@@ -128,11 +152,11 @@ def main(out, seconds, cam_hz, imu_hz):
     gt.write('# timestamp tx ty tz\n')
     nf = int(seconds * cam_hz)
     for k in range(nf):
-        t = 0.5 + k / cam_hz              # start after some IMU lead
+        t = CAM_START_S + k / cam_hz       # start after some IMU lead
         p, R = pose(t)
         ts = TIME_BASE_NS + int(t * 1e9)
         for idx, c in enumerate(('cam0', 'cam1')):
-            cv2.imwrite(f'{out}/mav0/{c}/data/{ts}.png', render(P, p, R, offs[idx], rng))
+            cv2.imwrite(f'{out}/mav0/{c}/data/{ts}.png', render(P, p, R, offs[idx], rng, patches))
             csv[c].write(f'{ts},{ts}.png\n')
         gt.write('%.9f %.6f %.6f %.6f\n' % (ts*1e-9, p[0], p[1], p[2]))
     for c in csv.values():
