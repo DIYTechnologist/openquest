@@ -12,7 +12,8 @@ Two capture-specific facts drive this (see notes/11):
     the SLAM frame rate, so pairing 0xe0 against the bright frames gives the affine map
     mono_ns = a*nrf_us + b, which we then apply to the IMU.
 """
-import csv, os, struct, sys, zlib, math
+import bisect, csv, os, struct, sys, zlib, math
+import numpy as np
 
 W, H_FULL, H = 640, 481, 480
 # The metadata row is row 0, NOT row 480: it reads mean~6 with a distinctive 00 00 01 ff ff ff 01 a5
@@ -64,6 +65,72 @@ def write_png(gray, path):
         f.write(b'\x89PNG\r\n\x1a\n'
                 + ck(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 0, 0, 0, 0))
                 + ck(b'IDAT', zlib.compress(raw, 1)) + ck(b'IEND', b''))
+
+
+def parse_syncboss_with_offsets(path):
+    """Like parse_syncboss, but also records each packet's byte offset in the stream."""
+    d = open(path, 'rb').read()
+    out = []
+    i, n = 0, len(d)
+    while i + 6 <= n:
+        if not (d[i] == 1 and d[i+1] == 3 and d[i+2] == 0 and d[i+4] == 0):
+            i += 1
+            continue
+        t, L = d[i+3], d[i+5]
+        if i + 6 + L > n:
+            break
+        pl = d[i+6:i+6+L]
+        if t == 0xe0 and L == 14:
+            out.append((0xe0, struct.unpack('<I', pl[1:5])[0], i))
+        elif t == 0x50 and L == 36:
+            out.append((0x50, struct.unpack('<I', pl[:4])[0], i))
+        i += 6 + L
+    return out
+
+
+def fit_from_chunks(cap, kinds):
+    """Fit nRF-microseconds -> host CLOCK_MONOTONIC ns for each packet type, using the host
+    timestamps cam_direct records against byte offsets of every read of the syncboss stream.
+
+    This replaces guessing. The 0xe0 exposure stamps and the 0x50 IMU stamps do NOT share an
+    epoch (0xe0 restarts at camera-stream start), and pairing two uniform 30 Hz sequences to
+    recover the offset is degenerate under integer frame shifts. Anchoring both to host time
+    instead resolves each independently, per capture.
+
+    read() returns a batch, so every packet in a chunk shares one arrival time and the true
+    arrival is at or before it. A least-squares line through the per-chunk MINIMUM residual
+    approximates the lower envelope and is robust to that quantisation.
+    """
+    chunks = []
+    for line in open(os.path.join(cap, 'syncboss_chunks.csv')):
+        if line.startswith('#'):
+            continue
+        c = line.strip().split(',')
+        chunks.append((int(c[0]), int(c[1]), int(c[2])))
+    if not chunks:
+        return {}
+    starts = [c[1] for c in chunks]
+    pkts = parse_syncboss_with_offsets(os.path.join(cap, 'syncboss.raw'))
+    fits = {}
+    for kind in kinds:
+        xs, ys = [], []
+        for k, ts, off in pkts:
+            if k != kind:
+                continue
+            j = bisect.bisect_right(starts, off) - 1
+            if 0 <= j < len(chunks) and off < chunks[j][1] + chunks[j][2]:
+                xs.append(ts)
+                ys.append(chunks[j][0])
+        if len(xs) < 100:
+            continue
+        xs = np.array(xs, float); ys = np.array(ys, float)
+        a = (len(xs)*np.sum(xs*ys) - xs.sum()*ys.sum()) / (len(xs)*np.sum(xs*xs) - xs.sum()**2)
+        b = np.percentile(ys - a*xs, 5)          # lower envelope: arrival >= true time
+        resid = (ys - (a*xs + b))
+        fits[kind] = (a, b)
+        print(f"  chunk-fit type 0x{kind:02x}: mono_ns = {a:.6f}*nrf_us + {b:.0f}  "
+              f"(n={len(xs)}, median arrival lag {np.median(resid)/1e6:.2f} ms)")
+    return fits
 
 
 def parse_syncboss(path):
@@ -181,7 +248,6 @@ def main(cap, out):
     # The exposures really are simultaneous — the FSIN strobe fires both cameras together — and the
     # residual is buffer-completion jitter in our own dequeue-side timestamping. So pair by nearest
     # neighbour within a tolerance and stamp both with the cam0 time. Unpaired frames are dropped.
-    import bisect
     PAIR_TOL_NS = 4_000_000            # 4 ms: well under the 33 ms frame period, well over the
                                        # observed 118 us median offset
     a_list, b_list = per_cam[cams[0]], per_cam[cams[1]]
@@ -204,7 +270,15 @@ def main(cap, out):
     # capture but could silently diverge on another one — and Basalt pairs stereo frames by exact
     # timestamp, so divergence would be near-impossible to spot. One list, one timestamp per pair.
     KOFF = int(os.environ.get('KOFF', '0'))
-    exp_ns = [t * 1000 + TIME_BASE_NS + CAM_SHIFT_NS for t in exp_us]
+    chunk_fits = {}
+    if os.path.exists(os.path.join(cap, 'syncboss_chunks.csv')):
+        print("using syncboss_chunks.csv to fit both clocks to host time:")
+        chunk_fits = fit_from_chunks(cap, (0xe0, 0x50))
+    if 0xe0 in chunk_fits and 0x50 in chunk_fits:
+        ae, be = chunk_fits[0xe0]
+        exp_ns = [int(ae * t + be) for t in exp_us]          # exposures on host monotonic
+    else:
+        exp_ns = [t * 1000 + TIME_BASE_NS + CAM_SHIFT_NS for t in exp_us]
 
     def snap(ts_mono):
         nrf_est = (ts_mono - b) / a
@@ -222,7 +296,8 @@ def main(cap, out):
 
     # Basalt needs IMU history covering the first frame; the FSIN strobe starts before the IMU
     # stream comes up, so frames without preceding IMU are unusable and get dropped.
-    cut = imu_us[0] * 1000 + TIME_BASE_NS + IMU_LEAD_NS
+    cut = ((int(chunk_fits[0x50][0]*imu_us[0] + chunk_fits[0x50][1]) if 0x50 in chunk_fits
+            else imu_us[0] * 1000 + TIME_BASE_NS) + IMU_LEAD_NS)
     snapped, seen, dropped_lead, dropped_dup = [], set(), 0, 0
     for ts, pa, pb in paired:
         e = snap(ts)                       # one snap per PAIR, so both cameras get one timestamp
@@ -263,8 +338,10 @@ def main(cap, out):
     with open(os.path.join(out, 'mav0', 'imu0', 'data.csv'), 'w') as f:
         f.write('#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z\n')
         for us, g, acc in zip(imu_us, [s[1] for s in imu], [s[2] for s in imu]):
+            ts_ns = (int(chunk_fits[0x50][0]*us + chunk_fits[0x50][1])
+                     if 0x50 in chunk_fits else us * 1000 + TIME_BASE_NS)
             f.write('%d,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n'
-                    % (us * 1000 + TIME_BASE_NS, g[0], g[1], g[2], acc[0], acc[1], acc[2]))
+                    % (ts_ns, g[0], g[1], g[2], acc[0], acc[1], acc[2]))
     print(f"wrote imu0 ({len(imu_us)} samples)")
     return 0
 

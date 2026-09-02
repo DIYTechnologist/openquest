@@ -455,3 +455,49 @@ Order of the three bugs found, all of which had to be fixed before anything work
 1. capture began in motion (procedure — affects real data only)
 2. `euroc_runner` fed IMU only up to each frame (harness)
 3. fixture landmarks were indistinguishable (test rig only)
+
+## Second capture (2026-09-02): well-conditioned data, initialiser still finicky
+
+`exports/vio-direct-2026-09-02/` — 30 s, 3609 frames, 30129 IMU samples, 928 exposure packets.
+Captured with the corrected procedure (hold still, then move).
+
+**The capture is good.** Measured accelerometer excitation:
+| period | excitation |
+|---|---|
+| held still on the head, t < 10 s | 0.125 m/s² |
+| walking, t = 13–25 s | 4.383 m/s² |
+| ratio | **35×** |
+
+Built dataset verified correctly aligned: frames start 0.5 s in, still until ~10 s, motion 10–30 s.
+
+**`syncboss_chunks.csv` works as intended.** The builder now fits each packet type's clock to host
+CLOCK_MONOTONIC directly from the recorded (host_time, byte_offset) pairs, replacing the
+session-specific `CAM_SHIFT_MS` guess:
+```
+0xe0 exposures: mono_ns = 998.831*nrf_us + ...   (median arrival lag 16.6 ms, 30 Hz quantisation)
+0x50 IMU:       mono_ns = 1000.016*nrf_us + ...  (median arrival lag 0.46 ms)
+```
+Both epochs are now resolved independently and per capture — no pairing of uniform sequences, no
+integer-frame-shift degeneracy.
+
+**Still blocked on OpenVINS initialisation.** Its logic is subtler than it first appears:
+- `has_jerk` is computed from **image disparity**, not the accelerometer: the older half of the
+  window must be below `init_max_disparity` and the newer half above. Setting that threshold very
+  high (which I tried) makes everything read "still", so `has_jerk` is never true and static init
+  is never even attempted. The stock 10.0 is correct for us (still ~0.2, moving ~110).
+- Only then does the accelerometer test run, and it needs the older half **below**
+  `init_imu_thresh` and the newer half **above**.
+- On a head-worn device the transition is gradual: at the window where disparity triggers, the
+  older half already reads 1.24 m/s². Every threshold tried either rejects it as "too much IMU
+  excitation" (older half too high) or as "no excitation" (newer half too low).
+
+Dynamic init (`init_dyn_use: true`) does initialise but immediately degrades —
+`covariance recovery failed` ×292, 69 poses over 2.3 s.
+
+### Most promising next step
+A **sharper start**: rest the headset on a table (excitation near the sensor noise floor, ~0.02,
+versus 0.125 held on the head), leave it ~5 s, then pick it up briskly and walk. That gives both a
+genuinely still window and a sharp jerk — the exact pattern the static initialiser is built around,
+and the pattern the synthetic fixture has (where initialisation works at stock thresholds).
+Failing that, the dynamic initialiser's covariance recovery needs proper investigation rather than
+threshold guessing.

@@ -97,7 +97,17 @@ def main(calib, a, b, out_dir, template_dir):
         # poses closer together.
         'init_window_time': 'init_window_time: 1.0',
         'init_max_features': 'init_max_features: 100',
-        'init_imu_thresh': 'init_imu_thresh: 0.5',      # our capture never sits fully still
+        # Accelerometer excitation needed to call the start of motion a "jerk". EuRoC's default
+        # (1.5) and even 0.5 are tuned for a drone; a person stepping off from standing still only
+        # reaches ~0.073 here, so anything higher means static init never fires and the window is
+        # then lost ("platform moving too much" once disparity climbs).
+        # Static init needs the OLD half of the window still and the NEW half jerking. Measured on
+        # this hardware: 0.125 m/s^2 held still on the head vs 4.38 while walking -- a 35x ratio,
+        # so 1.0 separates them cleanly.
+        # Accelerometer check inside static init: older half must be below this, newer half above.
+        # Measured 0.125 m/s^2 still on the head; the first moving window is ~0.85. 0.3 separates
+        # them with margin at the onset of motion, which is where the jerk is detected.
+        'init_imu_thresh': 'init_imu_thresh: 1.5',
         # OpenVINS picks static vs dynamic init by comparing image disparity against this. Our
         # captures run ~10 px, so a threshold of 10-15 classifies real motion as "stationary" and
         # forces the static path forever. Set it well below the observed disparity.
