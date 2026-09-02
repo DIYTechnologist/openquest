@@ -1,0 +1,10 @@
+FROM openvins:base
+COPY euroc_runner.cpp /src/euroc_runner.cpp
+# OpenVINS is built as plain CMake libs (no ROS); link the three of them plus OpenCV/Boost/Ceres.
+RUN g++ -O2 -std=c++17 -o /usr/local/bin/euroc_runner /src/euroc_runner.cpp \
+      -I/open_vins/ov_msckf/src -I/open_vins/ov_core/src -I/open_vins/ov_init/src \
+      -I/usr/include/eigen3 $(pkg-config --cflags opencv4) \
+      -L/build/ov_msckf -L/build/ov_core -L/build/ov_init \
+      -lov_msckf_lib -lov_init_lib -lov_core_lib \
+      $(pkg-config --libs opencv4) -lboost_system -lboost_filesystem -lceres -lpthread \
+   || (echo '--- link failed, listing built libs ---'; find /build -name '*.so' -o -name '*.a' | head -20; exit 1)

@@ -26,7 +26,9 @@ IMU_LEAD_NS = 500_000_000             # require this much IMU history before the
 # that sorts lexicographically would order the sequence wrongly. Shift everything by a constant
 # so all timestamps are the same width (the known-good EuRoC datasets are uniformly 14-15 digits).
 # Relative timing is untouched.
-TIME_BASE_NS = 100_000_000_000_000
+# 1e14 ns = 1e5 s. Kept modest on purpose: timestamps become doubles inside the estimators, and a
+# large base burns significant digits that would otherwise hold sub-microsecond resolution.
+TIME_BASE_NS = int(os.environ.get('TIME_BASE_NS', 100_000_000_000))
 # Camera->IMU time offset. !! THIS IS SESSION-SPECIFIC -- DO NOT REUSE 816 BLINDLY !!
 #
 # The 0xe0 exposure stamps are relative to CAMERA-STREAM START, while the 0x50 IMU stamps are on

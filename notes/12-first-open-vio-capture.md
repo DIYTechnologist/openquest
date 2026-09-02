@@ -289,3 +289,54 @@ images with verified-correct geometry. That is a limitation of this Basalt versi
 end, not of our data or calibration — so option 1 has gone as far as it can.
 
 → Proceeding to option 2: a VIO with real multi-camera support.
+
+## Option 2 attempted: OpenVINS (2026-09-02)
+
+Built headless — OpenVINS ships only its own simulator and ROS-based runners, so there was no way
+to feed it a plain EuRoC folder. New reusable pieces:
+- `tools/openvins-docker/Dockerfile` — OpenVINS built with `ENABLE_ROS=OFF` (ov_core, ov_init,
+  ov_msckf as plain CMake libraries).
+- `tools/openvins-docker/euroc_runner.cpp` + `Dockerfile.runner` — drives `VioManager` directly,
+  interleaving IMU and stereo frames in timestamp order and writing a TUM trajectory.
+- `tools/vio/make_openvins_config.py` — generates the three OpenVINS YAMLs from our factory
+  calibration. OpenVINS wants `T_imu_cam` (ours is `T_cam_imu`, so it is inverted) and calls the
+  Kannala-Brandt model `equidistant`, which is exactly our KB4 fit — so this feeds the **original
+  fisheye images**, with no rectification and no loss of field of view.
+
+**Result: it runs, initialises, and produces 607–608 poses with no NaN** — a better failure mode
+than Basalt — but the trajectory drifts to 800–1070 m over a 25 s room capture, i.e. visual
+updates are not constraining the state.
+
+**Valuable independent confirmation:** OpenVINS's own camera↔IMU time-offset calibration converges
+to **2.98 ms**, which independently validates the 816 ms correction derived from flow/gyro
+correlation. Two unrelated methods now agree that our time alignment is right.
+
+Tried without effect: `use_stereo: false` (treat the divergent rig as independent mono cameras —
+the setting that ought to suit this hardware), and a smaller timestamp base.
+*Gotcha:* OpenCV's YAML parser rejects a trailing comment on a bool
+(`the node use_stereo has an invalid boolean type of []`), so the first mono run silently did
+nothing. Write `use_stereo: false` with no trailing comment.
+
+## The data is not the problem — measured, not assumed
+| property | our capture | verdict |
+|---|---|---|
+| feature track half-life (no re-detection) | **≥40 frames** (181/200 alive after 20) | excellent |
+| frame-to-frame brightness change | median 1.1 grey levels | stable, no exposure flicker |
+| corner strength / gradient energy | better than the old leech dataset on both | excellent |
+| stereo epipolar error (SIFT) | 0.173° raw, 0.129° rectified | geometry correct |
+| IMU gyro-vs-accel consistency | 15.4° over 25 s (control: 19.4°) | good |
+| camera↔IMU time alignment | agreed by two independent methods (flow/gyro; OpenVINS) | correct |
+
+## Honest state
+Two independent estimators, fed data that measures as high quality on every axis we can test,
+both fail to constrain the state visually. Given the data checks out, the remaining suspicion is
+in how measurements reach the estimator rather than in the capture:
+1. **Verify the `T_imu_cam` convention end-to-end for OpenVINS.** Our epipolar check validated the
+   camera-to-camera geometry, but nothing has yet validated the camera-to-IMU extrinsic in
+   OpenVINS's convention. If that rotation is transposed, visual updates get chi2-rejected and the
+   filter falls back to IMU integration — exactly the symptom. This is the highest-value next
+   check and is pure desk work.
+2. Run OpenVINS on a public EuRoC sequence through the same runner. That validates the runner and
+   config generator against a known-good dataset and would immediately separate "our data" from
+   "our harness". (The ETH host was unreachable from here; use a mirror.)
+3. Only then consider a new capture.
