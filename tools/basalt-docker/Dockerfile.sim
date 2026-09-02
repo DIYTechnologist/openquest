@@ -1,0 +1,5 @@
+FROM basalt-vio:debug
+# basalt_vio_sim generates synthetic camera+IMU data internally, so it validates the estimator
+# core with no external dataset -- the decisive check on whether this 2021 build can converge
+# at all over more than ~42 frames.
+RUN cd /basalt/build && make -j$(nproc) basalt_vio_sim 2>&1 | tail -5

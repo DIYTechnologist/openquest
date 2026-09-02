@@ -179,3 +179,78 @@ reproduces the control exactly). Basalt nevertheless NaNs on the first optimisat
    estimator converges, the fault is Basalt-specific configuration rather than our data.
 3. **New capture using `syncboss_chunks.csv`** to build the clock map directly, and framed on a
    textured wall ~2 m away with slow translation and no hands/body in frame.
+
+---
+
+## ROOT CAUSE FOUND (2026-09-02): Basalt's stereo front end cannot match this camera rig
+
+Instrumented Basalt (`tools/basalt-docker/Dockerfile.{tools,debug,sim,state}`, built as
+`basalt-vio:state`) to print, per frame, the optical-flow observation count per camera, how many
+observations connect to existing landmarks, and the estimator state.
+
+### The chain of causation
+```
+obs_cam1 = 0 on every frame      (stereo front end matches nothing between the two cameras)
+   -> no landmark is ever triangulated
+   -> connected = 0 on every frame (nothing to re-observe)
+   -> zero visual constraints; the filter is pure IMU dead-reckoning
+   -> state grows exponentially: p=3.7e22, v=1.8e24, bias 3e5  ->  SO3::exp NaN
+```
+
+### Why the stereo matching fails
+Basalt's front end (both `frame_to_frame` and `patch`) tracks a patch **directly from the cam0
+image into the cam1 image**, which assumes near-parallel views. Relative rotation between the
+Quest's cameras, from the factory calibration:
+
+| pair | relative rotation | baseline |
+|---|---|---|
+| **(0,2)** | **19.6°** | 111.7 mm |
+| (0,1) | 79.7° | 74.2 mm |
+| (2,3) | 80.2° | 73.5 mm |
+| (1,2) | 95.7° | 148.5 mm |
+| (0,3) | 96.2° | 148.3 mm |
+| (1,3) | 164.7° | 148.3 mm |
+
+(0,2) — the pair we used — is already by far the most parallel, and 19.6° plus fisheye distortion
+is still too much for patch tracking. **No pair on this headset is a conventional stereo rig.**
+Note this is not a data problem: our own SIFT-based `epipolar_check.py` matches the same pair with
+0.173° median epipolar error and 362/407 inliers, so the overlap is real — it is specifically
+patch/KLT tracking across ~20° of rotation that fails.
+
+### !! CORRECTION: the previously "validated" VIO result was not converging !!
+`notes/08-vio-status.md` records "41 poses, 0.378 m smooth path" as a validated open VIO result,
+and this session used it as the known-good control. It is not one:
+- it also shows `obs_cam1 = 0` and `connected = 0` on every frame — same failure;
+- it processes exactly **42** frames and its dataset is **45** frames long, so it simply runs out
+  of data before diverging. Our data reaches measure #43 and blows up there.
+- Our dataset truncated to 44/46/60 frames diverges at the same point, confirming it is the frame
+  index, not the content.
+
+So the 0.378 m path is a slowly-diverging IMU-only dead-reckoning estimate that stopped early, not
+a tracked trajectory. **The open VIO pipeline has never actually converged.**
+
+### What is NOT the problem (independently established)
+- **Estimator core and calibration file**: `basalt_vio_sim` converges using our `calib.json`
+  (error 0.0224, 999 associations, exit 0).
+- **The `t1.detach()` patch** in `Dockerfile.patch`: the unpatched `basalt-vio:local` fails
+  identically.
+- Everything from the earlier elimination table (images, geometry, IMU, timestamps, PNG encoding).
+
+`optical_flow_levels: 6` stops the NaN (all 743 frames process) but the result is meaningless —
+534 m of path in a 25 s room capture — because it is still IMU-only.
+
+### Options, and the trade-off
+1. **Pre-rectify into a virtual parallel stereo pair** (recommended). Warp cam0 and cam2 into two
+   virtual cameras sharing an orientation with the baseline along x, then hand Basalt the
+   rectified calibration. Keeps Basalt and the existing toolchain; the cost is field of view,
+   since a fisheye pair 19.6° apart rectified to a common frame loses the outer parts of both
+   images. This is the standard fix and is pure host-side work.
+2. **Use a VIO that supports arbitrary multi-camera rigs** — OpenVINS handles non-overlapping and
+   divergent rigs natively, and Kimera/newer Basalt have better multi-cam support. Larger
+   dependency change, but a better long-term fit for a 4-camera headset where the whole point is
+   wide coverage.
+3. Mono-inertial on a single camera. Simplest, but loses scale observability from stereo and
+   throws away three cameras.
+
+Recommendation: try (1) first because it is cheap and reuses everything; treat (2) as the likely
+end state for a 4-camera rig.

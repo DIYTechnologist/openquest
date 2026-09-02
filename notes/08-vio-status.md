@@ -1,5 +1,12 @@
 # Open VIO on Quest 1 — status (2026-09-01)
 
+> **!! CORRECTED 2026-09-02 — the result below is NOT a converged trajectory.** Instrumenting
+> Basalt showed this dataset produces zero stereo observations and zero landmark connections on
+> every frame, i.e. the filter was running on IMU dead-reckoning alone. It processes 42 frames and
+> the dataset is 45 frames long, so it stops just before it would diverge; longer data from the
+> same pipeline blows up at measure #43. The "0.378 m smooth path" is early-stopped drift.
+> Root cause and options: `notes/12-first-open-vio-capture.md`.
+
 ## ACHIEVED: end-to-end open VIO that tracks
 Meta's closed blobs → open sensors → Basalt VIO trajectory, fully validated:
 - **IMU**: raw `oculus_syncboss` kernel FIFO (`/dev/syncboss_stream0` type-0x50), 1 kHz,

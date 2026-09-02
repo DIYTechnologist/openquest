@@ -1,0 +1,8 @@
+# Extra Basalt targets for diagnosing a non-converging dataset:
+#   basalt_opt_flow        - runs ONLY the optical-flow front end, so we can see whether
+#                            observations are produced at all (the base image builds just
+#                            basalt_vio, leaving the front end unobservable).
+#   basalt_time_alignment  - Basalt's own camera<->IMU time-offset estimator; an independent
+#                            check on the 816 ms offset we measured by flow/gyro correlation.
+FROM basalt-vio:patched
+RUN cd /basalt/build && make -j$(nproc) basalt_opt_flow basalt_time_alignment 2>&1 | tail -15

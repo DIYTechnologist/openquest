@@ -1,0 +1,3 @@
+FROM basalt-vio:sim
+COPY patch_state.py /tmp/patch_state.py
+RUN python3 /tmp/patch_state.py && cd /basalt/build && make -j$(nproc) basalt_vio 2>&1 | tail -5
