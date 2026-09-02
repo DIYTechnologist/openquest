@@ -541,3 +541,43 @@ progressively more realistic and find the single change that breaks it:
 4. match the real motion profile (a carried device, not a smooth analytic path)
 
 Whichever step breaks it is the cause. This is entirely offline and needs no further captures.
+
+## Bisection: fixture → reality (2026-09-02)
+
+Made the synthetic fixture progressively realistic to find the single change that breaks it.
+Knobs on `make_synthetic_euroc.py`: `SYN_IMU_NOISE`, `SYN_KB4`, `SYN_EXTR`, `SYN_EXTR_MODE`.
+
+| step | change | result (truth 6.95 m) |
+|---|---|---|
+| 0 | ideal | 7.13 m ✓ |
+| 1 | realistic IMU noise + constant bias (1× and 3×) | 6.17 m ✓ |
+| 2 | real KB4 fisheye intrinsics | 7.14 m ✓ |
+| 3a | real positions, identity rotations | 6.27 m ✓ |
+| 3b | real camera→IMU **rotation**, cameras parallel | 6.15 m ✓ |
+| 3c | **full real extrinsics — the 19.6° divergent pair** | **19.10 m** (≈3× worse) |
+
+**Conclusions.** IMU noise/bias, fisheye intrinsics and the camera→IMU rotation are all
+individually harmless. The 19.6° divergence between the cameras is a real and measurable
+degradation — consistent with the Basalt finding — but 19 m is nowhere near the ~500 m the real
+capture produces, so it is not the whole story.
+
+Timing was also excluded: sweeping the IMU offset over 0…120 ms on the real capture gives
+504/651/750/157/770/751/748/727/660 m — no coherent optimum, just a chaotic function of a
+diverging filter. (The 157 m at 30 ms is luck, not a minimum.)
+
+### A second fixture artifact, caught before it became a false finding
+Step 3 initially reported a hard failure (0 poses) and looked like proof that the camera→IMU
+rotation was wrong — which would have neatly "confirmed" the earlier 0.991-vs-0.690 extrinsic
+result. It was an artifact: the synthetic cloud sat only in front of the body, and the real
+rotation points the cameras elsewhere, so they saw **7 features instead of 300**. The scene now
+surrounds the device. With that fixed, the rotation is fine and the divergence is the real effect.
+
+That is twice this fixture has manufactured a plausible failure (identical landmarks, then a
+frontal-only scene). Any finding from it must be checked against feature counts and rendered
+images before being believed.
+
+### Still unexplained
+Fully realistic fixture: 19 m. Real capture: ~500 m. The remaining differences are things not yet
+modelled — real scene structure and depth distribution, motion blur, rolling shutter, the
+alternating-exposure frame selection, and sensor imperfections beyond white noise and a constant
+bias. Continuing the bisection into those is the logical next move.

@@ -23,6 +23,23 @@ BASELINE = 0.1117                      # metres, matches cam0<->cam2
 G = 9.80665
 TIME_BASE_NS = 100_000_000_000
 
+# Bisection knobs. The fixture tracks; the real capture does not. Rather than guess at the
+# difference, make the fixture progressively realistic and find the single change that breaks it.
+IMU_NOISE = float(os.environ.get('SYN_IMU_NOISE', '0'))    # 1.0 = the real sensor's noise+bias
+KB4       = os.environ.get('SYN_KB4', '')                  # path to the real calibration, or '' for ideal pinhole
+EXTR      = os.environ.get('SYN_EXTR', '')                 # same path: also use the REAL camera<->IMU
+                                                           # extrinsics (19.6 deg divergent pair)
+
+
+def quat_R(d):
+    q = np.array([d['qx'], d['qy'], d['qz'], d['qw']], float)
+    q /= np.linalg.norm(q)
+    x, y, z, w = q
+    return np.array([
+        [1-2*(y*y+z*z), 2*(x*y-z*w),   2*(x*z+y*w)],
+        [2*(x*y+z*w),   1-2*(x*x+z*z), 2*(y*z-x*w)],
+        [2*(x*z-y*w),   2*(y*z+x*w),   1-2*(x*x+y*y)]])
+
 
 def euler_R(yaw, pitch, roll):
     cy, sy = math.cos(yaw), math.sin(yaw)
@@ -96,15 +113,33 @@ def make_patches(n, rng):
     return [cv2.GaussianBlur(x, (3, 3), 0) for x in p]
 
 
-def render(P_world, p, R, cam_offset, rng, patches):
-    """Project the cloud into one camera, splatting each landmark's own patch."""
+def project(pc, intr):
+    """Project camera-frame points. Pinhole, or the real Kannala-Brandt fisheye when given one."""
+    if intr is None:
+        z = pc[:, 2]
+        return FOCAL*pc[:, 0]/z + W/2, FOCAL*pc[:, 1]/z + H/2
+    x, y, z = pc[:, 0], pc[:, 1], pc[:, 2]
+    r = np.sqrt(x*x + y*y)
+    th = np.arctan2(r, z)
+    t2 = th*th
+    td = th*(1 + intr['k1']*t2 + intr['k2']*t2**2 + intr['k3']*t2**3 + intr['k4']*t2**4)
+    sc = np.where(r > 1e-9, td/np.maximum(r, 1e-12), 0.0)
+    return intr['fx']*sc*x + intr['cx'], intr['fy']*sc*y + intr['cy']
+
+
+def render(P_world, p, R, cam_offset, rng, patches, intr=None, R_ic=None):
+    """Project the cloud into one camera, splatting each landmark's own patch.
+
+    R_ic is the camera->IMU rotation; with it the camera axes differ from the body axes, which is
+    the real rig (the two cameras diverge by 19.6 deg).
+    """
     img = np.full((H, W), 12, np.float32)
     C = p + R @ cam_offset                      # camera centre in world
-    pc = (R.T @ (P_world - C).T).T              # camera frame (camera axes == body axes)
+    Rwc = R if R_ic is None else R @ R_ic       # camera->world
+    pc = (Rwc.T @ (P_world - C).T).T
     z = pc[:, 2]
     idx = np.nonzero(z > 0.4)[0]
-    u = FOCAL * pc[idx, 0] / z[idx] + W/2
-    v = FOCAL * pc[idx, 1] / z[idx] + H/2
+    u, v = project(pc[idx], intr)
     h = PATCH // 2
     for j, uu, vv in zip(idx, u, v):
         cu, cv_ = int(round(uu)), int(round(vv))
@@ -117,11 +152,55 @@ def render(P_world, p, R, cam_offset, rng, patches):
     return np.clip(img, 0, 255).astype(np.uint8)
 
 
+BIAS_A = np.array([0.03, -0.02, 0.04])      # m/s^2
+BIAS_G = np.array([0.004, 0.002, -0.003])   # rad/s
+
+
 def main(out, seconds, cam_hz, imu_hz):
     rng = np.random.default_rng(7)
-    # a cloud spread in depth so there is real parallax, not a plane
-    P = np.column_stack([rng.uniform(-6, 6, 900), rng.uniform(-4, 4, 900), rng.uniform(2, 12, 900)])
+    print(f"  IMU_NOISE={IMU_NOISE}  KB4={KB4}")
+    # A shell of points AROUND the device, not just in front of it. A frontal cloud is invisible to
+    # a camera with a real camera<->IMU rotation -- the Quest's cameras point outward, so the
+    # earlier frontal cloud left them seeing 7 features instead of 300 and looked exactly like an
+    # extrinsics bug. Depth is randomised so there is genuine parallax rather than a shell surface.
+    n_pts = 2500
+    dirs = rng.normal(size=(n_pts, 3))
+    dirs /= np.linalg.norm(dirs, axis=1, keepdims=True)
+    P = dirs * rng.uniform(2.0, 12.0, (n_pts, 1))
     patches = make_patches(len(P), rng)
+    real_intr = None
+    if KB4:
+        rc = json.load(open(KB4))['value0']
+        real_intr = [rc['intrinsics'][0]['intrinsics'], rc['intrinsics'][2]['intrinsics']]
+        print("  using real KB4 fisheye intrinsics from", KB4)
+    real_T = None; declared = None
+    if EXTR:
+        ec = json.load(open(EXTR))['value0']
+        real_T = [dict(ec['T_imu_cam'][0]), dict(ec['T_imu_cam'][2])]
+        mode = os.environ.get('SYN_EXTR_MODE', 'full')
+        if mode == 'parallel':
+            # real camera<->IMU rotation, but both cameras share cam0's orientation: isolates the
+            # camera-to-IMU rotation from the 19.6 deg divergence between the two cameras
+            for k in ('qx', 'qy', 'qz', 'qw'):
+                real_T[1][k] = real_T[0][k]
+        elif mode == 'pos':
+            # real positions, identity rotations: isolates the divergence from everything else
+            for t in real_T:
+                t['qx'] = t['qy'] = t['qz'] = 0.0
+                t['qw'] = 1.0
+        print(f"  using real camera<->IMU extrinsics (mode={mode})")
+        # The fixture renders with R_ic AND declares R_ic, so no convention mismatch is possible
+        # unless the consumer reads the field in the opposite sense. This writes the TRANSPOSE into
+        # the calibration while still rendering with the original: if that tracks, the consumer's
+        # convention is the opposite of ours and we know exactly how to fix the real config.
+        if os.environ.get('SYN_DECLARE_TRANSPOSE'):
+            import copy
+            declared = copy.deepcopy(real_T)
+            for t in declared:
+                t['qx'], t['qy'], t['qz'] = -t['qx'], -t['qy'], -t['qz']   # conjugate = transpose
+            print("  DECLARING the transposed rotation in the calibration")
+        else:
+            declared = real_T
 
     for c in ('cam0', 'cam1'):
         os.makedirs(f'{out}/mav0/{c}/data', exist_ok=True)
@@ -140,11 +219,21 @@ def main(out, seconds, cam_hz, imu_hz):
             w = omega_body(t)
             # accelerometer measures specific force: R^T (a_world - g_world), g pointing down
             a = R.T @ (accel_world(t) + np.array([0, 0, G]))
+            if IMU_NOISE:
+                # per-sample sigmas from the factory calibration, plus a constant bias of the
+                # magnitude actually seen on this device
+                a = a + rng.normal(0, 0.016*IMU_NOISE, 3) + BIAS_A*IMU_NOISE
+                w = w + rng.normal(0, 0.000282*IMU_NOISE, 3) + BIAS_G*IMU_NOISE
             ts = TIME_BASE_NS + int(t * 1e9)
             f.write('%d,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g\n' % (ts, w[0], w[1], w[2], a[0], a[1], a[2]))
 
     # cameras + ground-truth poses
-    offs = [np.array([0.0, 0, 0]), np.array([BASELINE, 0, 0])]
+    if real_T:
+        offs = [np.array([t['px'], t['py'], t['pz']]) for t in real_T]
+        Rics = [quat_R(t) for t in real_T]
+    else:
+        offs = [np.array([0.0, 0, 0]), np.array([BASELINE, 0, 0])]
+        Rics = [None, None]
     csv = {c: open(f'{out}/mav0/{c}/data.csv', 'w') for c in ('cam0', 'cam1')}
     for c in csv.values():
         c.write('#timestamp [ns],filename\n')
@@ -156,7 +245,9 @@ def main(out, seconds, cam_hz, imu_hz):
         p, R = pose(t)
         ts = TIME_BASE_NS + int(t * 1e9)
         for idx, c in enumerate(('cam0', 'cam1')):
-            cv2.imwrite(f'{out}/mav0/{c}/data/{ts}.png', render(P, p, R, offs[idx], rng, patches))
+            cv2.imwrite(f'{out}/mav0/{c}/data/{ts}.png',
+                        render(P, p, R, offs[idx], rng, patches,
+                               real_intr[idx] if real_intr else None, Rics[idx]))
             csv[c].write(f'{ts},{ts}.png\n')
         gt.write('%.9f %.6f %.6f %.6f\n' % (ts*1e-9, p[0], p[1], p[2]))
     for c in csv.values():
@@ -165,11 +256,14 @@ def main(out, seconds, cam_hz, imu_hz):
 
     # Basalt-format calibration (identity camera<->IMU rotation keeps the test unambiguous)
     cal = {"value0": {
-        "T_imu_cam": [{"px": float(o[0]), "py": 0.0, "pz": 0.0,
-                       "qx": 0.0, "qy": 0.0, "qz": 0.0, "qw": 1.0} for o in offs],
-        "intrinsics": [{"camera_type": "pinhole",
-                        "intrinsics": {"fx": FOCAL, "fy": FOCAL, "cx": W/2-0.5, "cy": H/2-0.5}}
-                       for _ in offs],
+        "T_imu_cam": (declared if real_T else
+                      [{"px": float(o[0]), "py": 0.0, "pz": 0.0,
+                        "qx": 0.0, "qy": 0.0, "qz": 0.0, "qw": 1.0} for o in offs]),
+        "intrinsics": ([{"camera_type": "kb4", "intrinsics": dict(i)} for i in real_intr]
+                       if real_intr else
+                       [{"camera_type": "pinhole",
+                         "intrinsics": {"fx": FOCAL, "fy": FOCAL, "cx": W/2-0.5, "cy": H/2-0.5}}
+                        for _ in offs]),
         "resolution": [[W, H], [W, H]], "vignette": [],
         "calib_accel_bias": [0.0]*9, "calib_gyro_bias": [0.0]*12,
         "imu_update_rate": float(imu_hz),

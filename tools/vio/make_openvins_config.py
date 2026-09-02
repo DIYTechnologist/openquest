@@ -107,11 +107,11 @@ def main(calib, a, b, out_dir, template_dir):
         # Accelerometer check inside static init: older half must be below this, newer half above.
         # Measured 0.125 m/s^2 still on the head; the first moving window is ~0.85. 0.3 separates
         # them with margin at the onset of motion, which is where the jerk is detected.
-        'init_imu_thresh': 'init_imu_thresh: 1.5',
+        'init_imu_thresh': 'init_imu_thresh: %s' % os.environ.get('OV_IMU_THRESH', '1.5'),
         # OpenVINS picks static vs dynamic init by comparing image disparity against this. Our
         # captures run ~10 px, so a threshold of 10-15 classifies real motion as "stationary" and
         # forces the static path forever. Set it well below the observed disparity.
-        'init_max_disparity': 'init_max_disparity: 10.0',
+        'init_max_disparity': 'init_max_disparity: %s' % os.environ.get('OV_MAX_DISP', '10.0'),
         'calib_cam_intrinsics': 'calib_cam_intrinsics: false',   # factory calibration is trusted
         'calib_cam_extrinsics': 'calib_cam_extrinsics: false',
         # OpenVINS defaults to STATIC initialisation, which needs the device to sit still and then
