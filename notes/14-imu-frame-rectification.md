@@ -124,8 +124,38 @@ matter for tuning. Do not credit either with the fix.
 4. Only then look at frames/extrinsics — and validate them against the data, not against the
    calibration file they came from.
 
+## Cross-camera validation (no ground truth needed)
+
+All captures so far recorded only physical cameras 0 and 2, so a second *pair* is not available
+without a new capture. What is available: run the same capture three ways — stereo, mono on
+physical cam0, mono on physical cam2. The two mono runs use **completely disjoint image data**,
+different intrinsics and different extrinsics.
+
+Same world frame throughout (shared IMU init), so trajectories are directly comparable with no
+alignment:
+
+| | RMS | median | max |
+|---|---|---|---|
+| stereo vs mono cam0 | 0.020 m | 0.019 m | 0.064 m |
+| stereo vs mono cam2 | 0.065 m | 0.038 m | 0.361 m |
+| mono cam0 vs mono cam2 | 0.075 m | 0.052 m | 0.388 m |
+
+over 23.5 s / ~12 m of path; path lengths 11.98 / 12.06 / 12.53 m, a 4.5 % spread.
+
+**Metric scale.** Stereo takes its scale from the known 11.2 cm baseline; mono-inertial takes it
+from the accelerometer. These are independent, and they agree: median per-step displacement ratio
+**1.0011** (cam0) and **1.0024** (cam2), i.e. ~0.2 %. Use the per-step ratio, not a global
+least-squares scale fit on positions — the latter gives 0.39 % / 5.27 % because it is dominated by
+accumulated drift on a loop-shaped path, which is a drift measurement wearing a scale costume.
+
+**What this does and does not show.** It bounds per-camera calibration and front-end error, and
+cross-checks metric scale between two independent sources. It does **not** validate anything
+common-mode: all three share one IMU, one initialisation, and one factory calibration file, so a
+systematic IMU or global-frame error is invisible here. Still no absolute ground truth.
+
 ## Status
 
-Open camera + IMU stack: done (notes/11). **Open VIO on real data: converged, two captures.**
-Not yet done: no ground truth for either capture, so this is convergence and plausibility
-(bounded drift, correct lift-off signature, sane speeds) — not an accuracy number.
+Open camera + IMU stack: done (notes/11). **Open VIO on real data: converged on two captures, and
+self-consistent across three camera configurations to 2–7.5 cm RMS with ~0.2 % scale agreement.**
+Not yet done: no absolute ground truth, so there is still no true error number — only convergence,
+plausibility (bounded drift, correct lift-off signature, sane speeds) and internal consistency.
