@@ -29,6 +29,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
+#include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -180,6 +181,25 @@ int ioctl(int fd, int op, ...) {
     if (k < size) n += snprintf(buf + n, sizeof buf - n, "..+%u", size - k);
   } else {
     n += snprintf(buf + n, sizeof buf - n, "-");
+  }
+  // CSID/CSIPHY config is only 16 bytes on the wire -- { u32 cfgtype, union } -- and for the
+  // *params cfgtypes the union is a pointer, so dumping the payload alone captures a pointer value
+  // and none of the actual lane/clock/decode configuration.
+  //
+  // Follow it, but never by dereferencing directly: the same union also holds a plain u32 for the
+  // version query (cfgtype 0 returns csid_version 0x50000000), and treating that as an address
+  // segfaults the whole capture -- which is exactly what happened. process_vm_readv returns
+  // -EFAULT instead of dying, so no cfgtype table is needed and an unexpected one cannot crash us.
+  if ((req == VIDIOC_MSM_CSID_IO_CFG || req == VIDIOC_MSM_CSIPHY_IO_CFG) && arg && size >= 16) {
+    unsigned long ptr; memcpy(&ptr, (const unsigned char *)arg + 8, 8);
+    unsigned char tmp[96];
+    struct iovec liov = { tmp, sizeof tmp }, riov = { (void *)ptr, sizeof tmp };
+    if (ptr > 0x10000 &&
+        syscall(SYS_process_vm_readv, syscall(SYS_getpid), &liov, 1UL, &riov, 1UL, 0UL) > 0) {
+      n += snprintf(buf + n, sizeof buf - n, " deref=");
+      for (unsigned i = 0; i < sizeof tmp && n < (int)sizeof buf - 4; i++)
+        n += snprintf(buf + n, sizeof buf - n, "%02x", tmp[i]);
+    }
   }
   n += snprintf(buf + n, sizeof buf - n, "\n");
   logbuf(buf, (unsigned)n);

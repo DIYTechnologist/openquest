@@ -62,3 +62,48 @@ code — no number is transcribed by hand, and the table cannot drift from the h
 
 The payload hex is captured for every call, so the struct-level decode for 1.3 can be done offline
 against the headers — no further device time is needed to design the reimplementation.
+
+## Update: pointer-following, and the CSI configuration (step 1.3 design input)
+
+`csid_cfg_data` and `csiphy_cfg_data` are only 16 bytes on the wire — `{ u32 cfgtype, union }` —
+and for the `*_params` cfgtypes the union is a **pointer**. The first version of the trace captured
+the pointer value and none of the actual lane/clock/decode configuration, while looking complete.
+
+Following it needs care: the same union holds a plain `u32` for the version query (cfgtype 0
+returns `csid_version = 0x50000000`, i.e. CSID v5.0), and dereferencing *that* as an address
+segfaults the whole capture — which is what happened on the first attempt. The tracer now reads
+through `process_vm_readv`, which returns `-EFAULT` instead of dying, so no cfgtype table is needed
+and an unexpected one cannot crash the run.
+
+Recovered configuration, per camera:
+
+| | value |
+|---|---|
+| CSIPHY | `lane_cnt=1`, `lane_mask=0x0e` |
+| CSID | `lane_cnt=1`, `lane_assign=0x4320`, 1 CID entry (`vc/dt` = `01 00 00 00`) |
+| `phy_sel` per camera | **0, 1, 2, 2** |
+
+So each camera runs a **single CSI lane**, and the four sensors map onto **three CSIPHYs** with two
+sharing phy 2 — consistent with the 3 CSIPHY / 4 CSID / 2 VFE subdev counts in the topology above.
+
+### Per-camera bring-up order (what 1.3 must replay)
+
+```
+G_CTRL(videoN) -> CSID_IO_CFG(version query) -> CSIPHY_IO_CFG
+ION alloc/share xN -> S_PARM -> S_FMT -> REQBUFS(count=4, type=9 PRIVATE, memory=2 USERPTR)
+QBUF x4 -> STREAMON
+CSIPHY_IO_CFG(params) -> CSID_IO_CFG(params)
+ISP: [AHB_CLK_CFG once per VFE] SMMU_ATTACH -> INPUT_CFG -> REQUEST_STREAM -> SUBSCRIBE_EVENT
+     -> REQUEST_BUF -> ENQUEUE_BUF x4 -> UPDATE_STREAM -> CFG_STREAM
+ISPIF: ISPIF_CFG -> ISPIF_CFG_EXT -> ISPIF_CFG
+```
+
+VFE assignment is cameras 0,1 → `v4l-subdev10` and cameras 2,3 → `v4l-subdev11`.
+`ISP_REQUEST_STREAM` carries `session=3, stream=1, 'GREY'` (`V4L2_PIX_FMT_GREY`), and `S_FMT`
+reports `sizeimage=307840` = 640×481 mono8, matching what the frames actually are.
+
+### Still to decode for 1.3
+
+`msm_vfe_input_cfg` (172 B), `msm_vfe_axi_stream_request_cmd` (144 B) and `msm_ispif_cfg_data`
+(368 B). All three are captured in full in the trace and all three structs are in the published
+headers, so this is offline work — no further device time is needed to design the reimplementation.
