@@ -403,6 +403,16 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   //
   // Everything returns 0 either way, so none of this shows up as an error; it only shows up as no
   // frames. The order came from a positional diff of our trace against the vendor's.
+  // GET_SUBDEV_ID on CSIPHY and CSID. The vendor issues these before configuring, and a
+  // driver-level diff of a working B1 run against ours showed msm_csid_get_subdev_id present in
+  // B1 and absent here -- the only *causal* difference; every other B1-only code path was just a
+  // downstream consequence of an interrupt that never fired for us. An earlier restructure dropped
+  // these calls and left only a comment about them.
+  { uint32_t sd_id = 0;
+    xioctl(c->phyfd,  VIDIOC_MSM_SENSOR_GET_SUBDEV_ID, &sd_id, "CSIPHY_GET_SUBDEV_ID");
+    sd_id = 0;
+    xioctl(c->csidfd, VIDIOC_MSM_SENSOR_GET_SUBDEV_ID, &sd_id, "CSID_GET_SUBDEV_ID"); }
+
   uint32_t ver = 0;
   csid_version(c->csidfd, &ver);            // CSID_INIT
   csiphy_init(c->phyfd);
@@ -451,8 +461,22 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   if (xioctl(c->vfd, VIDIOC_REQBUFS, &rb, "REQBUFS") < 0) return -1;
 
   for (int b = 0; b < NBUF; b++) {
+    // m.userptr carries the ION dmabuf FD, NOT a virtual address.
+    //
+    // msm abuses V4L2_MEMORY_USERPTR: msm_isp_copy_planes_from_v4l2_buffer() does
+    //   qbuf_buf->planes[i].addr = vb2_buf->planes[i].m.userptr;
+    // and msm_isp_prepare_v4l2_buf() then does
+    //   mapped_info->buf_fd = qbuf_buf->planes[i].addr;   -> cam_smmu_get_phy_addr(fd)
+    // so the field is consumed as a dmabuf fd. That is also why msm_vb2_dma_contig_get_userptr()
+    // is a bare kzalloc+store stub -- there is no user pointer to map.
+    //
+    // Passing the real mmap'd address made the SMMU lookup fail and the ISP programmed a null DMA
+    // target, which the instrumented kernel showed as:
+    //   msm_isp_prepare_v4l2_buf: plane: 0 addr:0000000000000000
+    // The evidence was in the vendor trace all along -- its plane had m.userptr = 0x21 (33), far
+    // too small to be an address.
     struct v4l2_plane pl[1]; memset(pl, 0, sizeof pl);
-    pl[0].m.userptr = (unsigned long)c->buf[b].va;
+    pl[0].m.userptr = (unsigned long)c->buf[b].fd;
     pl[0].length = (unsigned int)c->buf[b].len;
     struct v4l2_buffer vb; memset(&vb, 0, sizeof vb);
     vb.index = b; vb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE; vb.memory = V4L2_MEMORY_USERPTR;
@@ -650,7 +674,7 @@ int main(int argc, char **argv) {
                (double)sum / FRAME_SZ, path);
       }
       got[i]++;
-      dpl[0].m.userptr = (unsigned long)cams[i].buf[vb.index].va;
+      dpl[0].m.userptr = (unsigned long)cams[i].buf[vb.index].fd;   // dmabuf fd, see QBUF note
       dpl[0].length = (unsigned int)cams[i].buf[vb.index].len;
       vb.m.planes = dpl; vb.length = 1;
       ioctl(cams[i].vfd, VIDIOC_QBUF, &vb);

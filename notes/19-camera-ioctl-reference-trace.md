@@ -598,3 +598,90 @@ out of scope under the standing rules, and better done during the OS-swap kernel
 (`notes/16`), where a rebuild is happening regardless.
 
 B1 remains the working camera path for all stock-OS work; nothing downstream is blocked.
+
+## Session 5: instrumented kernel — one more real bug, and two false leads killed
+
+With the instrumented kernel booted (`notes/21`), driver-level visibility is available for the
+first time. Findings:
+
+### Fixed: `m.userptr` must carry the ION dmabuf FD, not an address
+
+The msm camera driver **abuses `V4L2_MEMORY_USERPTR`**. `msm_buf_mgr.c`:
+
+```c
+qbuf_buf->planes[i].addr = vb2_buf->planes[i].m.userptr;   /* copy_planes_from_v4l2_buffer */
+mapped_info->buf_fd     = qbuf_buf->planes[i].addr;        /* prepare_v4l2_buf -> cam_smmu_get_phy_addr */
+```
+
+The field is consumed as a **dmabuf fd**. That is also why `msm_vb2_dma_contig_get_userptr()` is a
+bare `kzalloc`+store stub — there is no user pointer to map. We were passing the real mmap'd
+address, so the SMMU lookup failed.
+
+The evidence had been in the vendor trace since session 4: its `v4l2_plane` carried
+`m.userptr = 0x21` (33). It was even noted at the time as "too small to be an address, can only be
+an fd" — and then not acted on. **Noticing an anomaly is not the same as following it.**
+
+Verified fixed, from the kernel itself:
+
+```
+cam_smmu_map_buffer_and_add_to_list: name vfe ion_fd = 14, paddr = 0x10000000, len = 311296
+msm_isp_prepare_v4l2_buf: plane: 0 addr:0x10000000
+msm_isp_cfg_ping_pong_address: vfe 0 config buf 0 to pingpong 0 stream 1
+```
+
+Buffers now map to valid IOVAs and are programmed into the ISP ping-pong registers.
+
+### False lead killed: `kptr_restrict` was hiding every pointer
+
+`/proc/sys/kernel/kptr_restrict` was **2**, so `%pK` printed every kernel pointer as
+`0000000000000000`. The first instrumented run therefore showed
+`msm_isp_prepare_v4l2_buf: plane: 0 addr:0000000000000000` and I read it as "the DMA target is
+null". It was a printing artifact. `DMA buf`, `device` and `paddr` were *all* zero in the same
+line, which should have been the tell. Set `kptr_restrict=0` before trusting any pointer in dmesg.
+
+### False lead killed for good: CSID `0x800` was never a signal
+
+`notes/19` earlier treated "CSID reports only `0x800`" as evidence of absent CSI data, and
+`notes/21` predicted the instrumented kernel would finally make that interrupt meaningful. **Both
+were wrong.** Running B1 — which *does* deliver frames — on the same instrumented kernel produces
+exactly the same thing:
+
+```
+B1 (WORKS):   3x CSID0_IRQ_STATUS_ADDR = 0x800, 3x CSID1..., 3x CSID2..., 1x CSID3...
+B2 (NO DATA): 3x CSID0_IRQ_STATUS_ADDR = 0x800
+```
+
+Identical. CSID interrupt status simply does not report data flow on this hardware in this mode.
+Settled by a control experiment rather than by inference.
+
+### The clean signal: the VFE never receives an AXI interrupt
+
+Driver-level diff of a working B1 run against a failing B2 run:
+
+| kernel path | B1 (works) | B2 |
+|---|---|---|
+| `msm_isp_process_axi_irq` | 57 | **0** |
+| `msm_isp_process_axi_irq_stream` | 114 | **0** |
+| `msm_isp_notify` | 116 | **0** |
+| `msm_isp_get_buf` | 94 | **0** |
+| `msm_isp_process_done_buf` | 25 | **0** |
+| `msm_isp_cfg_ping_pong_address` | 38 (re-armed per frame) | 2 (initial arm only) |
+
+Every B1-only code path is a *downstream consequence of an interrupt firing*. The ISP is correctly
+armed and simply never told a frame arrived.
+
+### Verified identical, so not the cause
+
+- **ISPIF routing** — byte-identical for cam0: `intftype 1, vfe_intf 0, csid 0`,
+  `select_clk_mux data 0`, `pack_mask 0 0`. (B1's cam1 shows `intftype 3, csid 1`, independently
+  confirming the session-3 RDI-interface fix was right.)
+- **CSID config** — `lane_cnt=1, lane_assign=0x4320, phy_sel=0`, `cid_lut dt=0x2a df=1`.
+- **`GET_SUBDEV_ID`** — was genuinely missing from our path (a restructure dropped the calls and
+  left only a comment). Restored to the vendor's position. No change; not the cause.
+
+### Where it stands
+
+CSID configured correctly, ISPIF routed correctly, ISP buffers mapped to real IOVAs and armed —
+and the VFE never raises a frame interrupt. The fault is squarely between the sensor emitting CSI
+data and the VFE being told about it, with every userspace-visible configuration now verified
+identical to the working path.
