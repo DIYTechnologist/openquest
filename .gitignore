@@ -83,3 +83,7 @@ exports/vio-direct-*/euroc_t/
 exports/vio-direct-*/rect/
 exports/vio-direct-*/ovconfig_dbg/
 exports/vio-direct-*/ov_*.txt
+
+# Step X (notes/20): downloaded Android toolchain deps + OpenVINS source copy, ~1 GB.
+# Reproducible via tools/openvins-android/fetch.sh; never committed.
+work/android-deps/

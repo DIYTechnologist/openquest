@@ -20,7 +20,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 | 3 | Controllers | not started | button decode agreement | 0 % |
 | 4 | `trackingservice` in place | not started | Meta shell on our poses | no |
 | 5 | OS swap | not started | boots + tracks + streams | no |
-| X | Real-time budget | not started | VIO ms/frame on-device vs 33.3 | unknown |
+| X | Real-time budget | **DONE** (`notes/20`) | VIO ms/frame on-device vs 33.3 | **31.75** (tuned) |
 
 ---
 
