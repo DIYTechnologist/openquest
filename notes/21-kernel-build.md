@@ -168,3 +168,67 @@ non-booting device, and it cost a recovery cycle.
   boots, read `slot-unbootable`/`slot-retry-count` from fastboot *before and after*; (3) only then
   reintroduce the instrumented kernel; (4) have the device on a charger and expect to sit in
   fastboot between attempts.
+
+## SECOND ATTEMPT: SUCCESS — root cause was a missing Magisk kernel patch
+
+The instrumented kernel now boots, with root intact. The first failure had nothing to do with the
+kernel build, AVB, slot fallback, or image size — all three of my earlier hypotheses were wrong.
+
+### Root cause: `LEGACYSAR` / `skip_initramfs`
+
+This is a **legacy system-as-root device**. Magisk does not only patch the ramdisk — it hexpatches
+the **kernel binary**:
+
+```
+# Force kernel to load rootfs for legacy SAR devices
+# skip_initramfs -> want_initramfs
+$LEGACYSAR && ./magiskboot hexpatch kernel 736B69705F696E697472616D667300 77616E745F696E697472616D667300
+```
+
+Without it the kernel skips the initramfs entirely and tries to mount system-as-root, so Magisk's
+ramdisk never runs — a guaranteed bootloop.
+
+The tell was there before the first flash and I misread it as reassuring: our patched image's
+kernel was **md5-identical to our raw build**. I treated that as proof the right kernel got in. It
+was actually proof that *no kernel patch had been applied at all*. The working image's kernel is
+the same size as stock but a different md5 — Magisk had modified it in place.
+
+Confirmed by string counts:
+
+| kernel | `skip_initramfs` | `want_initramfs` |
+|---|---|---|
+| stock | 1 | 0 |
+| known-good Magisk | 0 | **1** |
+| our first (failed) flash | **1** | 0 ← never patched |
+| our second flash | 0 | **1** |
+
+`boot_patch.sh` was invoked without `LEGACYSAR=true`, so the patch silently did not apply.
+
+### The zero-risk validation that found it
+
+Rather than flashing to test, the chain was proven offline: repack `stock_boot.img` with the
+**stock** kernel and run `boot_patch.sh` with `LEGACYSAR=true`, then compare against the
+known-good image. The resulting kernel was **byte-identical** (`2240bd8e663b5ef8bbf58ee416a31cc6`)
+to the Magisk kernel the device had been running all along. That proved the process reproduced a
+known-good artifact exactly, with one variable left to change.
+
+This is what the first attempt should have done, and it costs nothing.
+
+### Verified before flashing (all three gates)
+
+- `skip_initramfs`=0, `want_initramfs`=1 — matches the working image
+- `magiskboot cpio ramdisk.cpio test` = 1 (Magisk-patched)
+- 43 `dynamic_debug` symbols — our instrumentation actually present
+
+### Result
+
+```
+Linux version 4.4.205-perf+ (ryanm@lptxps2) #2 SMP PREEMPT Thu Sep 3 20:58:43 BST 2026
+magisk 30.7, trackingservice running, SELinux Enforcing
+/sys/kernel/debug/dynamic_debug/control -> 15943 entries, 154 camera-related
+```
+
+Image: `backups/boot-monterey/new-boot_instrumented-LEGACYSAR.img` (md5 `1aceebd9…`).
+Recovery unchanged: `new-boot_magisk30.7.img` restores the stock-kernel rooted state.
+
+**Any future boot image for this device must be patched with `LEGACYSAR=true`.**
