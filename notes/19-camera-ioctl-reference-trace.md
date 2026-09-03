@@ -198,3 +198,58 @@ member before the tag:
 Case 3 is the instructive one: those values are absurd enough to notice, but nothing *forced*
 noticing them. Cases where a mis-tagged union yields plausible numbers are the ones that ship.
 **Read the tag, then the member — every time.**
+
+## B2 implementation status — pipeline up, CSI flowing, one bug left
+
+`tools/cam_kernel/cam_kernel.c` brings the whole pipeline up with **zero Meta blobs** — no
+`libqcameraoculushal.so`, no `libqcameradriver.so`, no `libsyncboss.so`:
+
+```
+[+] discovered: 3 csiphy, 4 csid, 2 vfe, ispif=/dev/v4l-subdev12, 4 video
+[+] mcu camera_probe / set_bpp / camera_init / set_frame_rate / set_exposure_gain / tag_mode
+[+] cam0 session=3  (/dev/video3, /dev/v4l-subdev3, /dev/v4l-subdev0, vfe0)
+[+] cam0 pipeline up          <- S_PARM, S_FMT, REQBUFS, QBUF x4, STREAMON,
+[+] 1/1 camera pipelines up      CSIPHY_CFG, CSID_CFG, SMMU_ATTACH, INPUT_CFG,
+[+] mcu start_streaming <-- FSIN  REQUEST_STREAM, REQUEST_BUF, ENQUEUE_BUF x4,
+                                  UPDATE_STREAM, CFG_STREAM, ISPIF_CFG, ISPIF_START
+```
+
+And the kernel confirms the CSI side is genuinely working:
+
+```
+msm_csid_init: CSID_VERSION = 0x30050000
+msm_csid_irq  CSID0_IRQ_STATUS_ADDR = 0x800      <- CSID is taking interrupts: data is arriving
+```
+
+**The one remaining bug**, and the kernel names it exactly:
+
+```
+msm_isp_cfg_ping_pong_address: msm_isp_get_stream_buffer() returned null, configuring scratch
+```
+
+The ISP has no buffers bound to the stream at ping-pong programming time, so it writes each frame
+into a scratch buffer instead of ours — hence `DQBUF` never produces anything. `ISP_REQUEST_BUF`
+and `ISP_ENQUEUE_BUF` both return 0, so the buffers are being *registered* but not *associated with
+the stream*; the suspect is the bufq binding done by `ISP_UPDATE_STREAM /
+UPDATE_STREAM_ADD_BUFQ`, specifically whether `user_stream_id` must match the video node's
+fh-assigned stream id rather than the `1` used in `REQUEST_STREAM`.
+
+### The decode error that cost a cycle
+
+`S_FMT`/`REQBUFS`/`QBUF` use `type = 9`, which the first decode pass called
+`V4L2_BUF_TYPE_PRIVATE`. It is not — **`V4L2_BUF_TYPE_PRIVATE` is `0x80`; 9 is
+`V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE`.** With PRIVATE, `S_PARM` failed `EINVAL` inside the v4l2
+core's `check_fmt()`, which rejects PRIVATE unless the driver exports
+`vidioc_g_fmt_type_private` (`camera.c` does not). MPLANE also changes the buffer layout: `m.planes`
+is a pointer to a `v4l2_plane` array and `length` is the **plane count**, not a byte count — which
+is exactly what the traced `QBUF` showed (`length=1` alongside a pointer).
+
+### Two operational lessons
+
+- **Line-buffer stdout.** Running detached with output redirected, the default block buffering meant
+  the first hang produced a completely empty log.
+- **Bound the tool's own lifetime.** A hang here is worse than a crash: this process holds
+  `/dev/video*` and `/dev/syncboss0`, which are single-open, so `trackingservice` and the sensors
+  HAL sat in a "restarting" loop until it was killed by pid. The restore watchdog cannot help —
+  it restarts services, it does not kill the holder. `cam_kernel` now sets `alarm(secs + 30)` and
+  opens the video nodes `O_NONBLOCK`, polling before `DQBUF`.

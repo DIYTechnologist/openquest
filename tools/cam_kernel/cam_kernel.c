@@ -27,6 +27,8 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <poll.h>
+#include <signal.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -177,12 +179,245 @@ static int discover(struct subdevs *s) {
   return (s->n_csiphy && s->n_csid && s->n_vfe && s->ispif[0] && s->n_video) ? 0 : -1;
 }
 
+
+// ── ION buffers ──────────────────────────────────────────────────────────────────────────────
+// The ISP writes through the SMMU, so frame buffers must be dmabufs, not plain malloc. Heap mask
+// 0x02000000 is ION_SYSTEM_HEAP_ID=25, matching the vendor's allocations in the trace.
+#define ION_HEAP_MASK (1u << 25)
+
+struct ionbuf { int handle; int fd; size_t len; void *va; };
+
+static int ion_fd = -1;
+
+static int ion_alloc(struct ionbuf *b, size_t len) {
+  struct ion_allocation_data a; memset(&a, 0, sizeof a);
+  a.len = len; a.align = 4096; a.heap_id_mask = ION_HEAP_MASK; a.flags = 1;
+  if (ioctl(ion_fd, ION_IOC_ALLOC, &a) < 0) { perror("ION_IOC_ALLOC"); return -1; }
+  struct ion_fd_data f; memset(&f, 0, sizeof f);
+  f.handle = a.handle;
+  if (ioctl(ion_fd, ION_IOC_SHARE, &f) < 0) { perror("ION_IOC_SHARE"); return -1; }
+  b->handle = a.handle; b->fd = f.fd; b->len = len;
+  b->va = mmap(NULL, len, PROT_READ | PROT_WRITE, MAP_SHARED, f.fd, 0);
+  if (b->va == MAP_FAILED) { perror("mmap ion"); b->va = NULL; return -1; }
+  return 0;
+}
+
+// ── per-camera bring-up ──────────────────────────────────────────────────────────────────────
+// Order and payloads replay the vendor sequence decoded in notes/19. Per-camera CSI values differ
+// only in csid_core/phy_sel, except camera 3 which shares CSIPHY 2 with camera 2 in combo mode.
+struct cam {
+  int vfd;                 // /dev/videoN
+  int phyfd, csidfd;       // subdev fds
+  int vfefd;               // ISP subdev (cams 0,1 -> vfe0; 2,3 -> vfe1)
+  uint32_t session, stream;
+  uint32_t isp_handle;     // returned by ISP_REQUEST_BUF
+  uint32_t axi_handle;     // returned by ISP_REQUEST_STREAM
+  struct ionbuf buf[NBUF];
+};
+
+static const struct { unsigned char lane_mask_lo, lane_mask_hi, combo, core; unsigned short assign; }
+  CSI_CFG[MAXCAM] = {
+    { 0x03, 0x00, 0, 0, 0x4320 },
+    { 0x03, 0x00, 0, 1, 0x4320 },
+    { 0x03, 0x00, 0, 2, 0x4320 },
+    { 0x18, 0x00, 1, 3, 0x0003 },   // shares CSIPHY 2 with camera 2, combo mode
+  };
+static const int PHY_SEL[MAXCAM] = { 0, 1, 2, 2 };
+
+static int csid_version(int fd, uint32_t *ver) {
+  struct csid_cfg_data c; memset(&c, 0, sizeof c);
+  c.cfgtype = CSID_INIT;
+  int r = xioctl(fd, VIDIOC_MSM_CSID_IO_CFG, &c, "CSID_INIT");
+  if (r == 0) *ver = c.cfg.csid_version;
+  return r;
+}
+
+static int csiphy_cfg(int fd, int i) {
+  struct msm_camera_csiphy_params p; memset(&p, 0, sizeof p);
+  p.lane_cnt = 1;
+  p.settle_cnt = 14;
+  p.lane_mask = (unsigned short)(CSI_CFG[i].lane_mask_lo | (CSI_CFG[i].lane_mask_hi << 8));
+  p.combo_mode = CSI_CFG[i].combo;
+  p.csid_core = CSI_CFG[i].core;
+  struct csiphy_cfg_data c; memset(&c, 0, sizeof c);
+  c.cfgtype = CSIPHY_CFG; c.cfg.csiphy_params = &p;
+  return xioctl(fd, VIDIOC_MSM_CSIPHY_IO_CFG, &c, "CSIPHY_CFG");
+}
+
+static int csid_cfg(int fd, int i) {
+  struct msm_camera_csid_vc_cfg vc; memset(&vc, 0, sizeof vc);
+  vc.cid = 0; vc.dt = 0x2a; vc.decode_format = 1;   // 0x2a = RAW8 over CSI-2; see notes/19 gap
+  struct msm_camera_csid_vc_cfg *vcp = &vc;
+  struct msm_camera_csid_params p; memset(&p, 0, sizeof p);
+  p.lane_cnt = 1;
+  p.lane_assign = CSI_CFG[i].assign;
+  p.phy_sel = (unsigned char)PHY_SEL[i];
+  p.lut_params.num_cid = 1;
+  p.lut_params.vc_cfg[0] = vcp;
+  struct csid_cfg_data c; memset(&c, 0, sizeof c);
+  c.cfgtype = CSID_CFG; c.cfg.csid_params = &p;
+  return xioctl(fd, VIDIOC_MSM_CSID_IO_CFG, &c, "CSID_CFG");
+}
+
+static int ispif_call(int fd, int cfgtype, int vfe_intf, int csid, const char *what) {
+  struct ispif_cfg_data c; memset(&c, 0, sizeof c);
+  c.cfg_type = (enum ispif_cfg_type_t)cfgtype;
+  c.params.num = 1;
+  c.params.entries[0].vfe_intf = (enum msm_ispif_vfe_intf)vfe_intf;
+  c.params.entries[0].intftype = RDI0;
+  c.params.entries[0].num_cids = 1;
+  c.params.entries[0].cids[0] = (enum msm_ispif_cid)0;
+  c.params.entries[0].csid = (enum msm_ispif_csid)csid;
+  c.params.entries[0].crop_enable = 0;
+  return xioctl(fd, VIDIOC_MSM_ISPIF_CFG, &c, what);
+}
+
+static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd) {
+  char *vp = sd->video[i];
+  // O_NONBLOCK: a blocking DQBUF with no frames arriving hangs the process forever, and
+  // because these devices are single-open that also blocks trackingservice from restarting.
+  c->vfd = open(vp, O_RDWR | O_NONBLOCK);
+  if (c->vfd < 0) { fprintf(stderr, "[-] open %s: %s\n", vp, strerror(errno)); return -1; }
+
+  // session_id is the video node number (camera.c: pvdev->vdev->num), read via a private G_CTRL.
+  struct v4l2_control ctl = { .id = MSM_CAMERA_PRIV_G_SESSION_ID, .value = 0 };
+  if (xioctl(c->vfd, VIDIOC_G_CTRL, &ctl, "G_SESSION_ID") < 0) return -1;
+  c->session = (uint32_t)ctl.value;
+  c->stream = 1;
+
+  c->csidfd = open(sd->csid[i], O_RDWR);
+  c->phyfd  = open(sd->csiphy[PHY_SEL[i]], O_RDWR);
+  c->vfefd  = open(sd->vfe[i / 2], O_RDWR);
+  if (c->csidfd < 0 || c->phyfd < 0 || c->vfefd < 0) { fprintf(stderr, "[-] subdev open\n"); return -1; }
+
+  uint32_t ver = 0;
+  csid_version(c->csidfd, &ver);
+  LOGV("[+] cam%d session=%u csid_version=0x%08x  (%s, %s, %s, vfe%d)\n",
+       i, c->session, ver, vp, sd->csid[i], sd->csiphy[PHY_SEL[i]], i / 2);
+
+  for (int b = 0; b < NBUF; b++)
+    if (ion_alloc(&c->buf[b], (FRAME_SZ + 4095) & ~4095u) < 0) return -1;
+
+  // S_PARM creates the stream (camera_v4l2_s_parm -> msm_create_stream). The payload is ignored;
+  // the file handle carries the ids.
+  struct v4l2_streamparm parm; memset(&parm, 0, sizeof parm);
+  parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+  if (xioctl(c->vfd, VIDIOC_S_PARM, &parm, "S_PARM") < 0) return -1;
+
+  struct v4l2_format fmt; memset(&fmt, 0, sizeof fmt);
+  fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+  struct msm_v4l2_format_data fd_; memset(&fd_, 0, sizeof fd_);
+  fd_.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+  fd_.width = W; fd_.height = H;
+  fd_.pixelformat = V4L2_PIX_FMT_GREY;
+  fd_.num_planes = 1;
+  fd_.plane_sizes[0] = FRAME_SZ;
+  memcpy(fmt.fmt.raw_data, &fd_, sizeof fd_);
+  if (xioctl(c->vfd, VIDIOC_S_FMT, &fmt, "S_FMT") < 0) return -1;
+
+  struct v4l2_requestbuffers rb; memset(&rb, 0, sizeof rb);
+  rb.count = NBUF; rb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE; rb.memory = V4L2_MEMORY_USERPTR;
+  if (xioctl(c->vfd, VIDIOC_REQBUFS, &rb, "REQBUFS") < 0) return -1;
+
+  // MPLANE: m.planes points at a v4l2_plane array and `length` is the PLANE COUNT, not a byte
+  // count. The traced QBUF showed length=1 with a pointer in m -- reading `9` as
+  // V4L2_BUF_TYPE_PRIVATE instead of VIDEO_CAPTURE_MPLANE is what made S_PARM fail with EINVAL,
+  // because check_fmt() rejects PRIVATE unless the driver exports vidioc_g_fmt_type_private.
+  for (int b = 0; b < NBUF; b++) {
+    struct v4l2_plane pl[1]; memset(pl, 0, sizeof pl);
+    pl[0].m.userptr = (unsigned long)c->buf[b].va;
+    pl[0].length = (unsigned int)c->buf[b].len;
+    struct v4l2_buffer vb; memset(&vb, 0, sizeof vb);
+    vb.index = b; vb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE; vb.memory = V4L2_MEMORY_USERPTR;
+    vb.m.planes = pl; vb.length = 1;
+    if (xioctl(c->vfd, VIDIOC_QBUF, &vb, "QBUF") < 0) return -1;
+  }
+
+  int type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+  if (xioctl(c->vfd, VIDIOC_STREAMON, &type, "STREAMON") < 0) return -1;
+
+  if (csiphy_cfg(c->phyfd, i) < 0) return -1;
+  if (csid_cfg(c->csidfd, i) < 0) return -1;
+
+  // ── ISP / VFE ──
+  struct msm_vfe_smmu_attach_cmd sm; memset(&sm, 0, sizeof sm);
+  sm.security_mode = 0; sm.iommu_attach_mode = IOMMU_ATTACH;
+  xioctl(c->vfefd, VIDIOC_MSM_ISP_SMMU_ATTACH, &sm, "SMMU_ATTACH");
+
+  struct msm_vfe_input_cfg icfg; memset(&icfg, 0, sizeof icfg);
+  icfg.input_src = VFE_RAW_0;
+  icfg.input_pix_clk = 48000000;
+  icfg.d.rdi_cfg.cid = 0;
+  icfg.d.rdi_cfg.frame_based = 1;
+  if (xioctl(c->vfefd, VIDIOC_MSM_ISP_INPUT_CFG, &icfg, "ISP_INPUT_CFG") < 0) return -1;
+
+  struct msm_vfe_axi_stream_request_cmd req; memset(&req, 0, sizeof req);
+  req.session_id = c->session; req.stream_id = c->stream;
+  req.output_format = V4L2_PIX_FMT_GREY;
+  req.stream_src = RDI_INTF_0;
+  req.frame_base = 1;
+  if (xioctl(c->vfefd, VIDIOC_MSM_ISP_REQUEST_STREAM, &req, "ISP_REQUEST_STREAM") < 0) return -1;
+  c->axi_handle = req.axi_stream_handle;
+
+  struct v4l2_event_subscription sub; memset(&sub, 0, sizeof sub);
+  sub.type = V4L2_EVENT_ALL;
+  xioctl(c->vfefd, VIDIOC_SUBSCRIBE_EVENT, &sub, "SUBSCRIBE_EVENT");
+
+  struct msm_isp_buf_request br; memset(&br, 0, sizeof br);
+  br.session_id = c->session; br.stream_id = c->stream;
+  br.num_buf = NBUF; br.buf_type = ISP_PRIVATE_BUF;
+  if (xioctl(c->vfefd, VIDIOC_MSM_ISP_REQUEST_BUF, &br, "ISP_REQUEST_BUF") < 0) return -1;
+  c->isp_handle = br.handle;
+
+  for (int b = 0; b < NBUF; b++) {
+    struct msm_isp_qbuf_info qi; memset(&qi, 0, sizeof qi);
+    qi.handle = c->isp_handle; qi.buf_idx = b;
+    qi.buffer.num_planes = 1;
+    qi.buffer.planes[0].addr = (uint32_t)c->buf[b].fd;   // dmabuf fd, not a virtual address
+    qi.buffer.planes[0].offset = 0;
+    qi.buffer.planes[0].length = (uint32_t)c->buf[b].len;
+    if (xioctl(c->vfefd, VIDIOC_MSM_ISP_ENQUEUE_BUF, &qi, "ISP_ENQUEUE_BUF") < 0) return -1;
+  }
+
+  struct msm_vfe_axi_stream_update_cmd up; memset(&up, 0, sizeof up);
+  up.num_streams = 1;
+  up.update_type = UPDATE_STREAM_ADD_BUFQ;
+  up.update_info[0].stream_handle = c->axi_handle;
+  up.update_info[0].user_stream_id = c->stream;
+  xioctl(c->vfefd, VIDIOC_MSM_ISP_UPDATE_STREAM, &up, "ISP_UPDATE_STREAM");
+
+  struct msm_vfe_axi_stream_cfg_cmd cfg; memset(&cfg, 0, sizeof cfg);
+  cfg.num_streams = 1;
+  cfg.stream_handle[0] = c->axi_handle;
+  cfg.cmd = START_STREAM;
+  if (xioctl(c->vfefd, VIDIOC_MSM_ISP_CFG_STREAM, &cfg, "ISP_CFG_STREAM") < 0) return -1;
+
+  // ── ISPIF ──
+  int vfe_intf = i / 2;
+  if (ispif_call(ispif_fd, ISPIF_CFG, vfe_intf, i, "ISPIF_CFG") < 0) return -1;
+  if (ispif_call(ispif_fd, ISPIF_START_FRAME_BOUNDARY, vfe_intf, i, "ISPIF_START") < 0) return -1;
+  LOGV("[+] cam%d pipeline up\n", i);
+  return 0;
+}
+
 int main(int argc, char **argv) {
   int ncam = argc > 1 ? atoi(argv[1]) : 1;
   int secs = argc > 2 ? atoi(argv[2]) : 3;
   uint16_t exposure = argc > 3 ? (uint16_t)atoi(argv[3]) : 3000;
   uint16_t gain = argc > 4 ? (uint16_t)atoi(argv[4]) : 160;
   if (ncam > MAXCAM) ncam = MAXCAM;
+
+  // Line-buffer stdout: this runs detached with output redirected to a file, so the default block
+  // buffering means a hang produces an EMPTY log and tells you nothing about where it stopped.
+  setvbuf(stdout, NULL, _IOLBF, 0);
+  setvbuf(stderr, NULL, _IOLBF, 0);
+
+  // Self-timeout. A hang here is worse than a crash: this process holds /dev/video* and
+  // /dev/syncboss0, which are single-open, so trackingservice and the sensors HAL cannot restart
+  // and sit in a "restarting" loop until it is killed. The restore watchdog cannot fix that -- it
+  // restarts services, it does not kill us. So bound our own lifetime.
+  signal(SIGALRM, SIG_DFL);
+  alarm((unsigned)(secs + 30));
   printf("=== cam_kernel: B2, no Meta blobs (%d cam, %ds, exp=%u gain=%u) ===\n",
          ncam, secs, exposure, gain);
 
@@ -200,8 +435,71 @@ int main(int argc, char **argv) {
   usleep(200000);
   mcu_configure(ncam, exposure, gain);
 
-  printf("\n[stage] this build stops after MCU configuration + graph discovery.\n");
-  printf("        Next: per-camera CSIPHY/CSID/ISPIF/VFE bring-up (notes/19 sequence).\n");
+  ion_fd = open("/dev/ion", O_RDONLY);
+  if (ion_fd < 0) { perror("open /dev/ion"); mcu_stop(); return 1; }
+
+  int ispif_fd = open(sd.ispif, O_RDWR);
+  if (ispif_fd < 0) { perror("open ispif"); mcu_stop(); return 1; }
+  { struct ispif_cfg_data c; memset(&c, 0, sizeof c);
+    c.cfg_type = ISPIF_SET_VFE_INFO; c.vfe_info.num_vfe = sd.n_vfe;
+    xioctl(ispif_fd, VIDIOC_MSM_ISPIF_CFG, &c, "ISPIF_SET_VFE_INFO");
+    memset(&c, 0, sizeof c);
+    c.cfg_type = ISPIF_INIT; c.csid_version = 0x50000000;
+    xioctl(ispif_fd, VIDIOC_MSM_ISPIF_CFG, &c, "ISPIF_INIT"); }
+
+  static struct cam cams[MAXCAM];
+  int up = 0;
+  for (int i = 0; i < ncam; i++)
+    if (bringup_camera(&cams[i], i, &sd, ispif_fd) == 0) up++;
+  printf("[%c] %d/%d camera pipelines up\n", up == ncam ? '+' : '-', up, ncam);
+  if (!up) { mcu_stop(); return 1; }
+
+  // FSIN strobe LAST: the MCU must strobe into a receiver that is already listening (notes/13).
+  mcu_start(ncam);
+  usleep(400000);
+
+  mkdir("/data/local/tmp/camkernel", 0755);
+  int got[MAXCAM] = {0};
+  double t_end = now_s() + secs;
+  while (now_s() < t_end) {
+    for (int i = 0; i < ncam; i++) {
+      struct pollfd pfd = { .fd = cams[i].vfd, .events = POLLIN | POLLPRI };
+      if (poll(&pfd, 1, 5) <= 0) continue;
+      struct v4l2_plane dpl[1]; memset(dpl, 0, sizeof dpl);
+      struct v4l2_buffer vb; memset(&vb, 0, sizeof vb);
+      vb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE; vb.memory = V4L2_MEMORY_USERPTR;
+      vb.m.planes = dpl; vb.length = 1;
+      if (ioctl(cams[i].vfd, VIDIOC_DQBUF, &vb) < 0) continue;
+      if (got[i] < 3 && vb.index < NBUF) {
+        const unsigned char *px = cams[i].buf[vb.index].va;
+        unsigned long sum = 0;
+        for (int k = 0; k < FRAME_SZ; k++) sum += px[k];
+        char path[128];
+        snprintf(path, sizeof path, "/data/local/tmp/camkernel/cam%d_%03d.gray", i, got[i]);
+        int f = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (f >= 0) { if (write(f, px, FRAME_SZ) < 0) {} close(f); }
+        printf("[cam %d frame %d] idx=%u ts=%ld.%06ld mean=%.1f -> %s\n", i, got[i], vb.index,
+               (long)vb.timestamp.tv_sec, (long)vb.timestamp.tv_usec,
+               (double)sum / FRAME_SZ, path);
+      }
+      got[i]++;
+      dpl[0].m.userptr = (unsigned long)cams[i].buf[vb.index].va;
+      dpl[0].length = (unsigned int)cams[i].buf[vb.index].len;
+      vb.m.planes = dpl; vb.length = 1;
+      ioctl(cams[i].vfd, VIDIOC_QBUF, &vb);
+    }
+    usleep(2000);
+  }
+  printf("\n[frames dequeued] ");
+  for (int i = 0; i < ncam; i++) printf("cam%d=%d ", i, got[i]);
+  printf("\n");
+
+  for (int i = 0; i < ncam; i++) {
+    int t = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+    ioctl(cams[i].vfd, VIDIOC_STREAMOFF, &t);
+    ispif_call(ispif_fd, ISPIF_STOP_IMMEDIATELY, i / 2, i, "ISPIF_STOP");
+  }
+  close(ispif_fd);
 
   mcu_stop();
   if (cfgfd >= 0) close(cfgfd);
