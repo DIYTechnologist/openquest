@@ -153,6 +153,35 @@ cross-checks metric scale between two independent sources. It does **not** valid
 common-mode: all three share one IMU, one initialisation, and one factory calibration file, so a
 systematic IMU or global-frame error is invisible here. Still no absolute ground truth.
 
+### IMU-free cross-check: stereo visual odometry (`tools/vio/stereo_vo_check.py`)
+
+This *does* close the common-mode gap, and needed no new infrastructure — KLT, KB4 unprojection and
+Kabsch were already written for the frame-validation above, and OpenCV supplies the rest. Estimate
+the trajectory from the **images alone**, taking metric scale from the known 11.2 cm stereo
+baseline instead of the accelerometer: triangulate cam0↔cam1 per frame, then `solvePnPRansac` into
+the next cam0 frame, and chain. `imu0/data.csv` is never opened.
+
+On the reference capture, 1156 poses, 38 failed steps, median 118 PnP inliers:
+
+| | VO (no IMU) | VIO |
+|---|---|---|
+| path length | 11.71 m | 11.98 m |
+| net displacement | 0.57 m | 0.56 m |
+
+rigid alignment (scale forced to 1) **RMS 0.111 m, median 0.074 m** over 23.5 s; median per-step
+displacement ratio VIO/VO **1.0087**, i.e. accelerometer-derived and baseline-derived scale agree
+to **0.9 %**.
+
+Two traps in reading this. First, the *full* VO run reports 26.75 m path / 4.12 m net — that
+includes the 16 s stationary lead-in, where VO random-walks with nothing to constrain it; only the
+overlap window is comparable, which is why the tool prints both. Second, the fitted similarity
+scale is 0.8642, which looks like a 13.6 % scale error and is not one: on a loop-shaped path a
+global scale fit absorbs accumulated drift. Use the per-step ratio.
+
+Still not fully independent — VO and VIO share the camera intrinsics and the baseline, so a
+calibration error stays common-mode. But the IMU is entirely outside the VO path, so
+accelerometer scale, gravity and bias are now genuinely cross-checked.
+
 ### Independent estimator: Basalt — still not usable (negative result)
 
 The natural way to close the common-mode gap is a second estimator. Rebuilt the rectified pair from
