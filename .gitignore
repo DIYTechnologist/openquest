@@ -87,3 +87,9 @@ exports/vio-direct-*/ov_*.txt
 # Step X (notes/20): downloaded Android toolchain deps + OpenVINS source copy, ~1 GB.
 # Reproducible via tools/openvins-android/fetch.sh; never committed.
 work/android-deps/
+
+# Kernel build: toolchains (~250 MB) and build output. Reproducible via
+# notes/21 + work/kbuild/env.sh; never committed.
+work/kbuild/aarch64-linux-android-4.9/
+work/kbuild/arm-linux-androideabi-4.9/
+work/kbuild/out/

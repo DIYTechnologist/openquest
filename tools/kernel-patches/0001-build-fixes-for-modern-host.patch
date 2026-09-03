@@ -1,0 +1,34 @@
+diff --git i/drivers/staging/oculus/Makefile w/drivers/staging/oculus/Makefile
+index f611a26d..e7ee62b7 100644
+--- i/drivers/staging/oculus/Makefile
++++ w/drivers/staging/oculus/Makefile
+@@ -32,5 +32,8 @@ obj-$(CONFIG_RT600_CTRL) 		+= rt600-ctrl.o
+ obj-$(CONFIG_TOP_PANEL_SENSOR)		+= top_panel_sensor.o
+ obj-$(CONFIG_SPI_STP)			+= stp/
+ obj-$(CONFIG_VIRTUAL_SENSOR_UTILS)	+= virtual_sensor_utils.o
+-obj-y					+= internal/
++# internal/ is referenced by Meta's GPLv2 release but the directory is not shipped, so there are no
++# sources to build and no built-in.o to link. Dropped rather than faked -- an empty stub object
++# would silently claim the code is present. No CONFIG_ symbol from that directory is enabled in the
++# device's own running config, so nothing is lost.
+ obj-y					+= mcu/
+diff --git i/scripts/Makefile.lib w/scripts/Makefile.lib
+index e997361f..b982e075 100644
+--- i/scripts/Makefile.lib
++++ w/scripts/Makefile.lib
+@@ -277,11 +277,10 @@ cmd_gzip = (cat $(filter-out FORCE,$^) | gzip -n -f -9 > $@) || \
+ 
+ # Disable noisy checks by default
+ ifeq ($(KBUILD_ENABLE_EXTRA_GCC_CHECKS),)
+-DTC_FLAGS += -Wno-unit_address_vs_reg \
+-	-Wno-avoid_default_addr_size \
+-	-Wno-simple_bus_reg \
+-	-Wno-unit_address_format \
+-	-Wno-reg_format
++# These -Wno- flags name checks that the IN-TREE dtc (1.4.2-g0931cea3) does not implement, so it
++# hard-errors with "Unrecognized check name". Meta evidently built with a newer external dtc.
++# Dropping them is a no-op for the generated DTBs: each one only *disables* a check that this dtc
++# never performs. Do not "fix" this by disabling the checks a newer dtc does have.
+ endif
+ 
+ # Generate an assembly file to wrap the output of the device tree compiler
