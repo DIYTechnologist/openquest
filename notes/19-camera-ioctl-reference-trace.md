@@ -214,12 +214,17 @@ noticing them. Cases where a mis-tagged union yields plausible numbers are the o
                                   UPDATE_STREAM, CFG_STREAM, ISPIF_CFG, ISPIF_START
 ```
 
-And the kernel confirms the CSI side is genuinely working:
+The kernel confirms CSID initialises:
 
 ```
 msm_csid_init: CSID_VERSION = 0x30050000
-msm_csid_irq  CSID0_IRQ_STATUS_ADDR = 0x800      <- CSID is taking interrupts: data is arriving
+msm_csid_irq  CSID0_IRQ_STATUS_ADDR = 0x800
 ```
+
+> **CORRECTION.** An earlier version of this note read that IRQ as "data is arriving". It is not.
+> `msm_csid.c` completes `reset_complete` on `csid_rst_done_irq_bitshift`, and `0x800` is exactly
+> that bit — the interrupt is a **reset acknowledgement**, not a packet. There is still no evidence
+> of CSI traffic from the sensors.
 
 **The one remaining bug**, and the kernel names it exactly:
 
@@ -253,3 +258,53 @@ is exactly what the traced `QBUF` showed (`length=1` alongside a pointer).
   HAL sat in a "restarting" loop until it was killed by pid. The restore watchdog cannot help —
   it restarts services, it does not kill the holder. `cam_kernel` now sets `alarm(secs + 30)` and
   opens the video nodes `O_NONBLOCK`, polling before `DQBUF`.
+
+## Buffer binding solved: the video node must be opened TWICE
+
+`msm_isp_get_stream_buffer() returned null, configuring scratch` is fixed, and the cause is worth
+recording because every ioctl involved returned success throughout.
+
+`S_PARM` registers the vb2 queue under `(session, fh stream_id)`, while `ISP_REQUEST_BUF` creates
+the ISP bufq under whatever ids we pass. If those disagree the bufq is still created, `ADD_BUFQ`
+still binds it, and every call still returns 0 — but `msm_isp_get_buf()` finds no vb2 queue for the
+pair and the ISP silently writes every frame into a scratch buffer.
+
+The correct stream id is **not** a free choice:
+
+- `camera_v4l2_open()` calls `camera_v4l2_fh_open()` **before** marking the node opened, and
+  fh_open does `stream_id = find_first_zero_bit(&atomic_read(&pvdev->opened))`.
+- So the **first** handle on a node gets `stream_id 0` *and creates the msm session*; the **second**
+  gets `stream_id 1`.
+- `ISP_REQUEST_BUF` rejects `stream_id 0` outright with `EINVAL` — which is the tell that 0 is not
+  usable, and why the vendor trace shows 1.
+
+So the vendor opens each video node twice and streams on the second handle. `cam_kernel` now does
+the same (`vfd_session` holds the first open, `vfd` is the streaming handle), and the scratch-buffer
+fallback is gone.
+
+## Where B2 actually stands
+
+| stage | state |
+|---|---|
+| media-graph / subdev discovery | works (via sysfs names) |
+| MCU: power, bpp, init, frame rate, exposure/gain, tag mode, FSIN start | works, blob-free |
+| video node: dual open, S_PARM, S_FMT, REQBUFS, QBUF, STREAMON | works |
+| CSIPHY_CFG, CSID_CFG | accepted; CSID resets and reports v0x30050000 |
+| ISP: SMMU_ATTACH, INPUT_CFG, REQUEST_STREAM, REQUEST_BUF, ENQUEUE_BUF, UPDATE_STREAM, CFG_STREAM | works; buffers correctly bound |
+| ISPIF: SET_VFE_INFO, INIT, CFG, START_FRAME_BOUNDARY | accepted |
+| **frames delivered** | **none** |
+
+Every ioctl returns 0 and nothing in the kernel log complains any more — but no CSI packets arrive.
+Next suspects, in order:
+
+1. **`VIDIOC_MSM_ISPIF_CFG_EXT` is not being sent.** The vendor's per-camera ISPIF sequence is
+   `CFG → CFG_EXT → START_FRAME_BOUNDARY`; `cam_kernel` currently sends `CFG → START`.
+2. **`lut_params.vc_cfg`** — the per-CID `vc`/`dt`/`decode_format` values were never captured (they
+   live behind pointers, see the gap above). `cam_kernel` guesses `dt=0x2a` (RAW8) and
+   `decode_format=1`. If the sensors emit a different data type, CSID will drop every packet
+   silently, which matches the symptom exactly. **This is the most likely cause.**
+3. Sensor-side subdev configuration (`VIDIOC_MSM_SENSOR_GET_SUBDEV_ID` probes appear in the vendor
+   trace and are not replicated).
+
+Closing (2) means extending `ioctl_trace` to chase `vc_cfg[]` at capture time — cheap, and it turns
+a guess into a measurement.

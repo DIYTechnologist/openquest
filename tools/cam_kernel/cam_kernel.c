@@ -206,7 +206,8 @@ static int ion_alloc(struct ionbuf *b, size_t len) {
 // Order and payloads replay the vendor sequence decoded in notes/19. Per-camera CSI values differ
 // only in csid_core/phy_sel, except camera 3 which shares CSIPHY 2 with camera 2 in combo mode.
 struct cam {
-  int vfd;                 // /dev/videoN
+  int vfd_session;         // first open: creates the msm session, holds stream_id 0
+  int vfd;                 // second open: the streaming handle, stream_id 1
   int phyfd, csidfd;       // subdev fds
   int vfefd;               // ISP subdev (cams 0,1 -> vfe0; 2,3 -> vfe1)
   uint32_t session, stream;
@@ -283,6 +284,21 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   struct v4l2_control ctl = { .id = MSM_CAMERA_PRIV_G_SESSION_ID, .value = 0 };
   if (xioctl(c->vfd, VIDIOC_G_CTRL, &ctl, "G_SESSION_ID") < 0) return -1;
   c->session = (uint32_t)ctl.value;
+
+  // The video node must be opened TWICE, and stream_id 1 comes from the second handle.
+  //
+  // camera_v4l2_open() runs fh_open() BEFORE marking the node opened, and fh_open does
+  //     stream_id = find_first_zero_bit(&atomic_read(&pvdev->opened))
+  // so the FIRST handle gets stream_id 0 and also creates the msm session; the SECOND gets
+  // stream_id 1. ISP_REQUEST_BUF rejects stream_id 0 outright (EINVAL), which is the tell.
+  //
+  // Getting this wrong is near-silent: with a mismatched stream id every ioctl still returns 0 --
+  // the bufq is created and ADD_BUFQ binds it -- but msm_isp_get_buf() finds no vb2 queue for
+  // (session, stream) and the ISP quietly writes every frame to a scratch buffer
+  // ("msm_isp_get_stream_buffer() returned null"). That cost two debug cycles.
+  c->vfd_session = c->vfd;                  // keep the first handle open: it owns the session
+  c->vfd = open(vp, O_RDWR | O_NONBLOCK);   // second handle: stream_id 1, used for streaming
+  if (c->vfd < 0) { fprintf(stderr, "[-] second open %s: %s\n", vp, strerror(errno)); return -1; }
   c->stream = 1;
 
   c->csidfd = open(sd->csid[i], O_RDWR);
@@ -358,6 +374,7 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   req.frame_base = 1;
   if (xioctl(c->vfefd, VIDIOC_MSM_ISP_REQUEST_STREAM, &req, "ISP_REQUEST_STREAM") < 0) return -1;
   c->axi_handle = req.axi_stream_handle;
+  LOGV("    axi_stream_handle=0x%08x\n", c->axi_handle);
 
   struct v4l2_event_subscription sub; memset(&sub, 0, sizeof sub);
   sub.type = V4L2_EVENT_ALL;
@@ -366,8 +383,10 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   struct msm_isp_buf_request br; memset(&br, 0, sizeof br);
   br.session_id = c->session; br.stream_id = c->stream;
   br.num_buf = NBUF; br.buf_type = ISP_PRIVATE_BUF;
+  // (session, stream) here MUST match the vb2 registration above -- see the note on c->stream.
   if (xioctl(c->vfefd, VIDIOC_MSM_ISP_REQUEST_BUF, &br, "ISP_REQUEST_BUF") < 0) return -1;
   c->isp_handle = br.handle;
+  LOGV("    isp_buf_handle=0x%08x (session=%u stream=%u)\n", c->isp_handle, c->session, c->stream);
 
   for (int b = 0; b < NBUF; b++) {
     struct msm_isp_qbuf_info qi; memset(&qi, 0, sizeof qi);
@@ -384,7 +403,7 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   up.update_type = UPDATE_STREAM_ADD_BUFQ;
   up.update_info[0].stream_handle = c->axi_handle;
   up.update_info[0].user_stream_id = c->stream;
-  xioctl(c->vfefd, VIDIOC_MSM_ISP_UPDATE_STREAM, &up, "ISP_UPDATE_STREAM");
+  if (xioctl(c->vfefd, VIDIOC_MSM_ISP_UPDATE_STREAM, &up, "ISP_UPDATE_STREAM") < 0) return -1;
 
   struct msm_vfe_axi_stream_cfg_cmd cfg; memset(&cfg, 0, sizeof cfg);
   cfg.num_streams = 1;
