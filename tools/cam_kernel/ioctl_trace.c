@@ -187,6 +187,21 @@ int ioctl(int fd, int op, ...) {
         n += snprintf(buf + n, sizeof buf - n, "%02x", ext[i]);
     }
   }
+  // QBUF for MPLANE carries m.planes as a pointer to an array of struct v4l2_plane. Chase it
+  // for VIDIOC_QBUF so the actual per-plane userptr/length/data_offset encoding can be verified
+  // against ours, not just the outer v4l2_buffer header (which matched byte for byte already).
+  if (req == VIDIOC_QBUF && arg) {
+    unsigned long pptr;
+    memcpy(&pptr, (const unsigned char *)arg + 64, 8);   // offsetof(v4l2_buffer, m) = 64
+    unsigned char pl[64];
+    struct iovec l = { pl, sizeof pl }, r = { (void *)pptr, sizeof pl };
+    if (pptr > 0x10000 &&
+        syscall(SYS_process_vm_readv, syscall(SYS_getpid), &l, 1UL, &r, 1UL, 0UL) > 0) {
+      n += snprintf(buf + n, sizeof buf - n, " planederef=");
+      for (unsigned i = 0; i < sizeof pl && n < (int)sizeof buf - 4; i++)
+        n += snprintf(buf + n, sizeof buf - n, "%02x", pl[i]);
+    }
+  }
   // Dump the payload AFTER the call so _IOR/_IOWR results are captured too. Capped: a few of these
   // carry large embedded arrays and the interesting configuration is at the head.
   if (arg && size && size <= 4096) {

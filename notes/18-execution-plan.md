@@ -15,7 +15,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 | # | Step | State | Headline metric | Now |
 |---|---|---|---|---|
 | 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
-| 1 | Direct-kernel camera (B2) | 1.1, 1.2 done; **1.3 PARKED at kill criterion** (`notes/19`) | Meta libs needed by capture | **2** (was 3) |
+| 1 | Direct-kernel camera (B2) | 1.1, 1.2 done; 1.3 two more real bugs fixed, still PARKED (`notes/19`) | Meta libs needed by capture | **2** (was 3) |
 | 2 | Ground truth vs Meta | not started | ATE RMSE vs Meta poses | unknown |
 | 3 | Controllers | not started | button decode agreement | 0 % |
 | 4 | `trackingservice` in place | not started | Meta shell on our poses | no |

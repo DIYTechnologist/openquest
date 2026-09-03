@@ -417,3 +417,96 @@ so its CSID lifecycle is init/release-heavy in a way we have not reproduced (`CS
 - Everything needed to resume is committed: the reference trace with all payloads decoded, the
   `cam_kernel` implementation, and the trace-diff harness (`run_ck_trace.sh`) that localises
   divergence by position, not just by count.
+
+## Session 3: two more real bugs found, exhaustive verification, still parked
+
+Kept digging past the first kill-criterion checkpoint since two of the four remaining suspects
+were genuine bugs, not dead ends. Both are now fixed and confirmed real via direct evidence.
+
+### Fixed: `CSIPHY_INIT` was never sent, and the vendor's INIT/RELEASE/INIT dance matters
+
+Counting cfgtypes in the vendor trace: `CSIPHY_INIT` ×8, `CSIPHY_CFG` ×4, `CSIPHY_RELEASE` ×8 —
+`cam_kernel` sent only `CSIPHY_CFG`. The vendor's exact per-camera shape, recovered from a
+positional (not just count) diff of the reference trace:
+
+```
+CSID_INIT, CSIPHY_INIT, CSIPHY_RELEASE, CSID_RELEASE        (on the FIRST video-node handle)
+G_CTRL, CSID_INIT, CSIPHY_INIT                                (on the SECOND handle)
+S_PARM, S_FMT, REQBUFS, QBUF x4, STREAMON
+ISPIF_SET_VFE_INFO, ISPIF_INIT, AHB_CLK_CFG
+CSIPHY_CFG, CSID_CFG                                          (configured AFTER streamon)
+SMMU_ATTACH, INPUT_CFG, REQUEST_STREAM, SUBSCRIBE_EVENT,
+REQUEST_BUF, ENQUEUE_BUF x4, UPDATE_STREAM, CFG_STREAM
+ISPIF_CFG, ISPIF_CFG2, ISPIF_START_FRAME_BOUNDARY
+```
+
+`cam_kernel` now replays this exactly, including `CSIPHY_RELEASE` (which needs real lane
+params — passing a zeroed union faults inside `msm_csiphy_cmd` at `copy_from_user`, logged as
+`msm_csiphy_cmd: 1551 failed`; fixed by sending the same `{lane_assign, lane_mask}` as `CFG`).
+
+### Fixed: RDI interface assignment for cameras sharing a VFE
+
+Real, confirmed bug, only visible once testing moved from 1 camera to 4. Two cameras share each
+VFE (0,1→vfe0; 2,3→vfe1), and each VFE exposes multiple RDI interfaces (`VFE_RAW_0/1/2`).
+`cam_kernel` hardcoded `VFE_RAW_0` for every camera; the second camera on a VFE then failed
+`ISP_INPUT_CFG` with `EINVAL` — invisible with `ncam=1`, where a lone camera on an idle VFE always
+gets `RAW_0` and always succeeds, which is exactly what every single-camera debug run before this
+one exercised. Vendor trace, byte-decoded: `input_src=1 (VFE_RAW_0)` for the first camera on a
+VFE, `input_src=2 (VFE_RAW_1)` for the second; `REQUEST_STREAM.stream_src` correspondingly
+`RDI_INTF_0`/`RDI_INTF_1`. Fixed as `VFE_RAW_0 + (i % 2)` / `RDI_INTF_0 + (i % 2)`. All 4 camera
+pipelines now come up cleanly with zero kernel errors.
+
+### Extensive verification that ruled out everything else checked
+
+None of the following explain the missing frames, each confirmed by reading the actual driver
+source or decoding the actual bytes with the compiled struct (not by inspection):
+
+- **`msm_isp_get_stream_buffer() returned null, configuring scratch` is not the failure signal.**
+  It fires in the **working** B1 path too (10 times in a 3 s 4-camera run) — it's normal
+  ping-pong-register initialisation noise at stream start, not evidence of anything broken.
+- **Frame-boundary interrupts are firing.** `dmesg`'s rate-limit machinery reports
+  `msm_isp_cfg_ping_pong_address: 44 callbacks suppressed` over an 8 s single-camera run — the
+  function is being called repeatedly throughout, which needs a live interrupt source. This
+  weighs against (though does not disprove) the "no CSI data" theory from the previous session.
+- **The `v4l2_plane.m.userptr`/`.fd` field is functionally inert.** Read `__qbuf_userptr()` in
+  `videobuf2-core.c` and MSM's own `msm_vb2_dma_contig_get_userptr()`: the latter is a bare
+  `kzalloc` + store, no `get_user_pages`, no validation. Generic vb2 core only checks
+  `length >= plane_size`. The real buffer↔hardware wiring is entirely through
+  `ISP_REQUEST_BUF`/`ISP_ENQUEUE_BUF` (which uses the ION fd correctly). Confirmed the vendor's own
+  captured value in this field (`33`) is implausible as a real pointer and is presumably just
+  their own fd number reused — harmless either way.
+- **The `csid_version` return-value discrepancy (vendor reads back `0x50000000`, we read `0`) is
+  diagnostic-only,** not load-bearing. `msm_csid_init()` does a *live register read*
+  (`csid_dev->hw_version = msm_camera_io_r(...)`, confirmed equal to `CSID_VERSION_V35` in dmesg
+  on both working and non-working runs) and assigns it to the output parameter *before* any
+  branch that could affect kernel-internal state; internal `if (hw_version < V30)` branches use
+  the kernel's own copy, not what gets copied back to userspace. Whatever discrepancy exists here
+  cannot itself change the kernel's own behaviour. Retired as a suspect — an earlier note ranked
+  this as "the sharpest remaining thread," which was a misprioritisation.
+- **`ISP_CFG_STREAM`'s `cmd` value matches**: vendor sends `cmd=1` (`START_STREAM`),
+  `stream_handle[0]=0x205`, matching our own `axi_stream_handle` exactly.
+- **Daemon-disabled semantics are correct and global.** `MSM_CAM_V4L2_IOCTL_DAEMON_DISABLED` sets
+  a module-scope `is_daemon_status = false` (`msm.c`), so sending it once on `/dev/video0` before
+  opening any camera node is sufficient — confirmed by reading `camera_v4l2_streamon`/`s_parm`,
+  both of which skip the daemon round-trip entirely and do the essential `vb2_streamon`/
+  `msm_create_stream` unconditionally.
+- **Small settle delays (2–5 ms) between CSIPHY_INIT/CFG and CSID_CFG/ISPIF_START** made no
+  difference — added and tested, then this is not a PHY-lock timing issue at the granularity
+  tried.
+
+### Where this leaves it
+
+Every ioctl, in the right order, with byte-identical payloads (verified against the compiled
+kernel structs, not eyeballed) and now-correct RDI routing — and still no frames. The remaining
+candidates are not reachable by tracing userspace ioctls at all: sensor-side I2C/CCI state
+(entirely in-kernel per `notes/11`, invisible to us), SMMU/IOMMU mapping faults (would need
+`dmesg` iommu fault logging, none observed, or ION cache-flag effects, though those could not
+explain zero DQBUF *events*, only wrong *content*), or something in the physical FSIN/CSI signal
+timing that requires a scope or kernel printk instrumentation to see — which means flashing a
+kernel, explicitly off-limits per the standing rules.
+
+**Restating the parked status from the previous checkpoint, now on stronger evidence**: B1 remains
+the working camera path for all stock-OS work. B2 is only required for the OS swap itself, and
+is better resumed there — a from-scratch kernel build is a natural point to add real
+`pr_info`/`CDBG` instrumentation to the driver rather than inferring behaviour from a userspace
+ioctl trace, which is close to the ceiling of what that method can resolve.

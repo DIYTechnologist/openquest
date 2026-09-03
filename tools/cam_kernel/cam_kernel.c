@@ -244,6 +244,21 @@ static int csiphy_init(int fd) {
   return xioctl(fd, VIDIOC_MSM_CSIPHY_IO_CFG, &c, "CSIPHY_INIT");
 }
 
+// CSIPHY_RELEASE is NOT a bare command: msm_csiphy.c:1548 does copy_from_user() on
+// cfg.csi_lane_params, so passing a zeroed union makes it fault with EFAULT and log
+// "msm_csiphy_cmd: 1551 failed". It needs the same lane assign/mask the CFG uses.
+static int csi_release(int phyfd, int csidfd, int i) {
+  struct msm_camera_csi_lane_params lp;
+  lp.csi_lane_assign = CSI_CFG[i].assign;
+  lp.csi_lane_mask = (unsigned short)(CSI_CFG[i].lane_mask_lo | (CSI_CFG[i].lane_mask_hi << 8));
+  struct csiphy_cfg_data p; memset(&p, 0, sizeof p);
+  p.cfgtype = CSIPHY_RELEASE; p.cfg.csi_lane_params = &lp;
+  int a = xioctl(phyfd, VIDIOC_MSM_CSIPHY_IO_CFG, &p, "CSIPHY_RELEASE");
+  struct csid_cfg_data c; memset(&c, 0, sizeof c); c.cfgtype = CSID_RELEASE;
+  int b = xioctl(csidfd, VIDIOC_MSM_CSID_IO_CFG, &c, "CSID_RELEASE");
+  return (a < 0 || b < 0) ? -1 : 0;
+}
+
 static int csiphy_cfg(int fd, int i) {
   struct msm_camera_csiphy_params p; memset(&p, 0, sizeof p);
   p.lane_cnt = 1;
@@ -363,21 +378,52 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   if (c->vfd < 0) { fprintf(stderr, "[-] second open %s: %s\n", vp, strerror(errno)); return -1; }
   c->stream = 1;
 
-  // Reuse the session-long fds from the INIT sweep -- reopening would re-run open/release cycles
-  // on hardware that is already initialised.
-  c->csidfd = g_csidfd[i];
-  c->phyfd  = g_phyfd[PHY_SEL[i]];
+  // Opened once here and held for the whole session. Note these must NOT be closed between the
+  // INIT/RELEASE/INIT dance below -- the CSID driver releases on last close, so closing would undo
+  // the init we just performed.
+  c->csidfd = (g_csidfd[i] > 0) ? g_csidfd[i] : (g_csidfd[i] = open(sd->csid[i], O_RDWR));
+  c->phyfd  = (g_phyfd[PHY_SEL[i]] > 0) ? g_phyfd[PHY_SEL[i]]
+                                        : (g_phyfd[PHY_SEL[i]] = open(sd->csiphy[PHY_SEL[i]], O_RDWR));
   c->vfefd  = open(sd->vfe[i / 2], O_RDWR);
   if (c->csidfd < 0 || c->phyfd < 0 || c->vfefd < 0) { fprintf(stderr, "[-] subdev fd\n"); return -1; }
 
   LOGV("[+] cam%d session=%u  (%s, %s, %s, vfe%d)\n",
        i, c->session, vp, sd->csid[i], sd->csiphy[PHY_SEL[i]], i / 2);
 
+  // EXACT replay of the vendor bring-up order (notes/19). Two parts of it are counter-intuitive
+  // and were both wrong in earlier attempts:
+  //
+  //   * CSID_INIT + CSIPHY_INIT are done on the FIRST video-node handle, then RELEASED, then done
+  //     AGAIN on the second handle. Skipping the release/re-init leaves the CSI blocks associated
+  //     with the wrong handle.
+  //   * ISPIF_SET_VFE_INFO and ISPIF_INIT come AFTER STREAMON, not at startup. Doing them globally
+  //     before any camera -- which is what "initialise the hardware first" intuition suggests --
+  //     puts the ISPIF in the wrong state by the time the stream is configured.
+  //
+  // Everything returns 0 either way, so none of this shows up as an error; it only shows up as no
+  // frames. The order came from a positional diff of our trace against the vendor's.
+  uint32_t ver = 0;
+  csid_version(c->csidfd, &ver);            // CSID_INIT
+  csiphy_init(c->phyfd);
+  usleep(2000);
+  csi_release(c->phyfd, c->csidfd, i);      // CSIPHY_RELEASE + CSID_RELEASE
+  usleep(2000);
+
+  c->vfd_session = c->vfd;                  // first handle keeps the session
+  c->vfd = open(vp, O_RDWR | O_NONBLOCK);   // second handle: stream_id 1
+  if (c->vfd < 0) { fprintf(stderr, "[-] second open %s: %s\n", vp, strerror(errno)); return -1; }
+  { struct v4l2_control c2 = { .id = MSM_CAMERA_PRIV_G_SESSION_ID, .value = 0 };
+    xioctl(c->vfd, VIDIOC_G_CTRL, &c2, "G_SESSION_ID(2)"); }
+
+  ver = 0;
+  csid_version(c->csidfd, &ver);            // CSID_INIT again, on the streaming handle
+  csiphy_init(c->phyfd);                    // CSIPHY_INIT again
+  usleep(2000);
+  LOGV("    csid_version=0x%08x\n", ver);
+
   for (int b = 0; b < NBUF; b++)
     if (ion_alloc(&c->buf[b], (FRAME_SZ + 4095) & ~4095u) < 0) return -1;
 
-  // S_PARM creates the stream (camera_v4l2_s_parm -> msm_create_stream). The payload is ignored;
-  // the file handle carries the ids.
   struct v4l2_streamparm parm; memset(&parm, 0, sizeof parm);
   parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
   if (xioctl(c->vfd, VIDIOC_S_PARM, &parm, "S_PARM") < 0) return -1;
@@ -397,10 +443,6 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   rb.count = NBUF; rb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE; rb.memory = V4L2_MEMORY_USERPTR;
   if (xioctl(c->vfd, VIDIOC_REQBUFS, &rb, "REQBUFS") < 0) return -1;
 
-  // MPLANE: m.planes points at a v4l2_plane array and `length` is the PLANE COUNT, not a byte
-  // count. The traced QBUF showed length=1 with a pointer in m -- reading `9` as
-  // V4L2_BUF_TYPE_PRIVATE instead of VIDEO_CAPTURE_MPLANE is what made S_PARM fail with EINVAL,
-  // because check_fmt() rejects PRIVATE unless the driver exports vidioc_g_fmt_type_private.
   for (int b = 0; b < NBUF; b++) {
     struct v4l2_plane pl[1]; memset(pl, 0, sizeof pl);
     pl[0].m.userptr = (unsigned long)c->buf[b].va;
@@ -414,24 +456,36 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   int type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
   if (xioctl(c->vfd, VIDIOC_STREAMON, &type, "STREAMON") < 0) return -1;
 
-  // ORDER MATTERS HERE. The vendor configures CSIPHY/CSID *after* STREAMON and AHB_CLK_CFG and
-  // *before* the ISP block, having already INIT-ed every PHY and CSID globally up front. An earlier
-  // version configured the CSI side before AHB_CLK_CFG and left the global INIT sweep out; every
-  // ioctl still returned 0 and the kernel logged nothing, but no CSI packet ever arrived. A
-  // positional diff of our own trace against the vendor reference is what exposed the difference --
-  // counts alone showed nothing, because the same calls were all present.
+  // ISPIF globals AFTER streamon, per the vendor order.
+  { struct ispif_cfg_data ic; memset(&ic, 0, sizeof ic);
+    ic.cfg_type = ISPIF_SET_VFE_INFO; ic.vfe_info.num_vfe = sd->n_vfe;
+    xioctl(ispif_fd, VIDIOC_MSM_ISPIF_CFG, &ic, "ISPIF_SET_VFE_INFO");
+    memset(&ic, 0, sizeof ic);
+    ic.cfg_type = ISPIF_INIT; ic.csid_version = 0x50000000;
+    xioctl(ispif_fd, VIDIOC_MSM_ISPIF_CFG, &ic, "ISPIF_INIT"); }
+
   { struct msm_isp_ahb_clk_cfg ahb; memset(&ahb, 0, sizeof ahb); ahb.vote = 2;
     xioctl(c->vfefd, VIDIOC_MSM_ISP_AHB_CLK_CFG, &ahb, "ISP_AHB_CLK_CFG"); }
 
   if (csiphy_cfg(c->phyfd, i) < 0) return -1;
+  usleep(2000);                             // let the PHY lock before CSID accepts the lanes
   if (csid_cfg(c->csidfd, i) < 0) return -1;
+  usleep(2000);
 
   struct msm_vfe_smmu_attach_cmd sm; memset(&sm, 0, sizeof sm);
   sm.security_mode = 0; sm.iommu_attach_mode = IOMMU_ATTACH;
   xioctl(c->vfefd, VIDIOC_MSM_ISP_SMMU_ATTACH, &sm, "SMMU_ATTACH");
 
+  // Each VFE has multiple RDI interfaces (VFE_RAW_0/1/2) and two cameras share a VFE here
+  // (cam0,1 -> vfe0; cam2,3 -> vfe1), so both cameras on a VFE cannot claim VFE_RAW_0 -- the
+  // second ISP_INPUT_CFG call fails with EINVAL, which is exactly what running with ncam=4
+  // surfaced (cam1 and cam3 both failed). The vendor trace confirms byte-for-byte: input_src=1
+  // (VFE_RAW_0) for the first camera on a VFE, input_src=2 (VFE_RAW_1) for the second; rdi_cfg.cid
+  // stays 0 for both (cid is a CSID-side id, not per-VFE). This was invisible with ncam=1: a lone
+  // camera on an otherwise-idle VFE always gets RAW_0 and the call always succeeds, which is
+  // exactly the case every single-camera debug run before now exercised.
   struct msm_vfe_input_cfg icfg; memset(&icfg, 0, sizeof icfg);
-  icfg.input_src = VFE_RAW_0;
+  icfg.input_src = (enum msm_vfe_input_src)(VFE_RAW_0 + (i % 2));
   icfg.input_pix_clk = 48000000;
   icfg.d.rdi_cfg.cid = 0;
   icfg.d.rdi_cfg.frame_based = 1;
@@ -440,11 +494,10 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   struct msm_vfe_axi_stream_request_cmd req; memset(&req, 0, sizeof req);
   req.session_id = c->session; req.stream_id = c->stream;
   req.output_format = V4L2_PIX_FMT_GREY;
-  req.stream_src = RDI_INTF_0;
+  req.stream_src = (enum msm_vfe_axi_stream_src)(RDI_INTF_0 + (i % 2));
   req.frame_base = 1;
   if (xioctl(c->vfefd, VIDIOC_MSM_ISP_REQUEST_STREAM, &req, "ISP_REQUEST_STREAM") < 0) return -1;
   c->axi_handle = req.axi_stream_handle;
-  LOGV("    axi_stream_handle=0x%08x\n", c->axi_handle);
 
   struct v4l2_event_subscription sub; memset(&sub, 0, sizeof sub);
   sub.type = V4L2_EVENT_ALL;
@@ -453,16 +506,14 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   struct msm_isp_buf_request br; memset(&br, 0, sizeof br);
   br.session_id = c->session; br.stream_id = c->stream;
   br.num_buf = NBUF; br.buf_type = ISP_PRIVATE_BUF;
-  // (session, stream) here MUST match the vb2 registration above -- see the note on c->stream.
   if (xioctl(c->vfefd, VIDIOC_MSM_ISP_REQUEST_BUF, &br, "ISP_REQUEST_BUF") < 0) return -1;
   c->isp_handle = br.handle;
-  LOGV("    isp_buf_handle=0x%08x (session=%u stream=%u)\n", c->isp_handle, c->session, c->stream);
 
   for (int b = 0; b < NBUF; b++) {
     struct msm_isp_qbuf_info qi; memset(&qi, 0, sizeof qi);
     qi.handle = c->isp_handle; qi.buf_idx = b;
     qi.buffer.num_planes = 1;
-    qi.buffer.planes[0].addr = (uint32_t)c->buf[b].fd;   // dmabuf fd, not a virtual address
+    qi.buffer.planes[0].addr = (uint32_t)c->buf[b].fd;
     qi.buffer.planes[0].offset = 0;
     qi.buffer.planes[0].length = (uint32_t)c->buf[b].len;
     if (xioctl(c->vfefd, VIDIOC_MSM_ISP_ENQUEUE_BUF, &qi, "ISP_ENQUEUE_BUF") < 0) return -1;
@@ -485,6 +536,7 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   int vfe_intf = i / 2;
   if (ispif_call(ispif_fd, ISPIF_CFG, vfe_intf, i, "ISPIF_CFG") < 0) return -1;
   if (ispif_cfg2(ispif_fd, vfe_intf, i) < 0) return -1;
+  usleep(5000);
   if (ispif_call(ispif_fd, ISPIF_START_FRAME_BOUNDARY, vfe_intf, i, "ISPIF_START") < 0) return -1;
   LOGV("[+] cam%d pipeline up\n", i);
   return 0;
@@ -528,16 +580,9 @@ int main(int argc, char **argv) {
   ion_fd = open("/dev/ion", O_RDONLY);
   if (ion_fd < 0) { perror("open /dev/ion"); mcu_stop(); return 1; }
 
-  if (csi_init_all(&sd) < 0) { fprintf(stderr, "[-] CSI init sweep failed\n"); mcu_stop(); return 1; }
-
   int ispif_fd = open(sd.ispif, O_RDWR);
   if (ispif_fd < 0) { perror("open ispif"); mcu_stop(); return 1; }
-  { struct ispif_cfg_data c; memset(&c, 0, sizeof c);
-    c.cfg_type = ISPIF_SET_VFE_INFO; c.vfe_info.num_vfe = sd.n_vfe;
-    xioctl(ispif_fd, VIDIOC_MSM_ISPIF_CFG, &c, "ISPIF_SET_VFE_INFO");
-    memset(&c, 0, sizeof c);
-    c.cfg_type = ISPIF_INIT; c.csid_version = 0x50000000;
-    xioctl(ispif_fd, VIDIOC_MSM_ISPIF_CFG, &c, "ISPIF_INIT"); }
+  // ISPIF SET_VFE_INFO/INIT are issued per camera AFTER STREAMON -- see bringup_camera().
 
   static struct cam cams[MAXCAM];
   int up = 0;
