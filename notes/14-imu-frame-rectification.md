@@ -153,6 +153,27 @@ cross-checks metric scale between two independent sources. It does **not** valid
 common-mode: all three share one IMU, one initialisation, and one factory calibration file, so a
 systematic IMU or global-frame error is invisible here. Still no absolute ground truth.
 
+### Independent estimator: Basalt — still not usable (negative result)
+
+The natural way to close the common-mode gap is a second estimator. Rebuilt the rectified pair from
+the corrected dataset (`rect_v2`, focal 190, IMU carried through unchanged and verified) and ran
+Basalt. It dies in the **optical-flow front end** on the first frame:
+
+```
+Sophus ensure failed ... SO2Base<...>::normalize()
+Complex number should not be close to zero!
+```
+
+**Control: the old raw-IMU `rect/` dataset crashes identically**, so this is pre-existing behaviour
+of `basalt-vio:patched` on this rig, not something the IMU fix introduced. The rectified images
+themselves are fine — a well-exposed, well-textured indoor scene, 0.5 % black corner from the warp
+(`/tmp/rect_sample.png` in-session; regenerate with `rectify_pair.py`).
+
+Consistent with notes/12's conclusion that Basalt's front end is the wrong tool for this rig.
+Getting an independent estimator would mean debugging Basalt's optical flow (degenerate patches,
+`optical_flow_max_recovered_dist2`) or bringing up a third one. Not attempted — the cost is not
+justified while the cheaper and more direct route to the same confidence is a ground-truth capture.
+
 ## Status
 
 Open camera + IMU stack: done (notes/11). **Open VIO on real data: converged on two captures, and
