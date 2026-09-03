@@ -41,8 +41,34 @@ critical path, not an optimisation. We have full kernel source for both the came
 - **OpenXR APKs: achievable.** Monado provides an Android OpenXR runtime; an OpenXR-native APK
   loads the runtime through the loader. ALVR is open source and OpenXR, so the SteamVR-desktop
   goal sits entirely inside the achievable half and needs nothing from Meta.
-- **VrApi APKs: excluded by the constraint.** They link Meta's closed `libvrapi.so`. Supporting
-  them means writing a VrApi→OpenXR shim — new code, not a port, and nobody has written one.
+- **VrApi APKs: STRETCH GOAL, not excluded.** They link Meta's closed `libvrapi.so`, so they cannot
+  work directly under the no-closed-binaries rule. The route is an open `libvrapi.so` replacement
+  translating VrApi calls to OpenXR — new code rather than a port, and no such shim exists that we
+  know of. Deliberately parked: it is additive, it does not block anything else, and it only pays
+  off once tracking, display and a working OpenXR runtime already exist.
+
+  **Measured surface** (`readelf --dyn-syms dumps/system_lib64/libvrapi.so`): **107 exported
+  functions.** That is small — OpenXR is far larger — and the shape is a plain C frame loop, so the
+  mapping is bounded rather than open-ended.
+
+  Roughly 50 of the 107 are optional feature subsets that a shim can answer "unsupported" for
+  without breaking typical sideloaded content (counts measured, the "optional" judgement is mine):
+  body tracking 6, hand tracking 3, boundary/guardian 6, keyboard overlay 3, tracked objects 6,
+  capture/telemetry 4, system UI/home 4, Vulkan 6, Android surface swapchains 5, misc internal 6.
+  That leaves ~55 to actually implement: init/enter/leave, the swapchain family, system
+  properties/status, `PollEvent`, tracking + recentring, input + haptics, and the frame loop.
+
+  The difficulty is not the count — it is concentrated in a handful of them:
+  - `vrapi_SubmitFrame2` / `vrapi_BeginFrame` / `vrapi_WaitFrame`: layer composition, TimeWarp and
+    foveation, all of which Monado's compositor would have to service.
+  - The swapchain family (`vrapi_CreateTextureSwapChain{,2,3,4}` + handle/sampler accessors):
+    GPU buffer interop with whatever compositor backs it.
+  - `vrapi_Initialize` takes an `ovrJava` (JavaVM + activity), so the shim needs real Android/JNI
+    integration, not just a C library.
+
+  One favourable detail: apps reach the implementation through a loader (note the exported
+  `VRAPI_LOADER_API_LEVEL_V3` symbol), so an open replacement at the expected path is a drop-in
+  rather than requiring per-app patching. Confirm that loader behaviour before relying on it.
 - **Entitlement is mostly a non-issue** for sideloaded APKs; it is a Store mechanism. Some apps
   call the Platform SDK even when sideloaded and will fail regardless.
 
