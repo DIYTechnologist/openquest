@@ -373,10 +373,11 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   // the bufq is created and ADD_BUFQ binds it -- but msm_isp_get_buf() finds no vb2 queue for
   // (session, stream) and the ISP quietly writes every frame to a scratch buffer
   // ("msm_isp_get_stream_buffer() returned null"). That cost two debug cycles.
-  c->vfd_session = c->vfd;                  // keep the first handle open: it owns the session
-  c->vfd = open(vp, O_RDWR | O_NONBLOCK);   // second handle: stream_id 1, used for streaming
-  if (c->vfd < 0) { fprintf(stderr, "[-] second open %s: %s\n", vp, strerror(errno)); return -1; }
-  c->stream = 1;
+  // NOTE: the second open happens further down, in vendor order (after the CSI INIT/RELEASE
+  // dance). An earlier restructure left a duplicate open here, so the node was opened THREE
+  // times and the streaming handle landed on stream_id 2 instead of 1 -- silently, because
+  // nothing errors: the ISP bufq is then created for stream 1 while the vb2 queue is registered
+  // under stream 2, and frames go to a scratch buffer forever.
 
   // Opened once here and held for the whole session. Note these must NOT be closed between the
   // INIT/RELEASE/INIT dance below -- the CSID driver releases on last close, so closing would undo
@@ -424,9 +425,15 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   for (int b = 0; b < NBUF; b++)
     if (ion_alloc(&c->buf[b], (FRAME_SZ + 4095) & ~4095u) < 0) return -1;
 
+  // S_PARM registers the vb2 queue under (session, fh stream_id) AND writes that stream_id back
+  // in parm.capture.extendedmode (camera.c: "use stream_id as stream index"). Read it rather than
+  // assuming 1: the ISP bufq must be created for exactly this id or msm_isp_get_buf() finds no
+  // vb2 queue and every frame silently lands in a scratch buffer.
   struct v4l2_streamparm parm; memset(&parm, 0, sizeof parm);
   parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
   if (xioctl(c->vfd, VIDIOC_S_PARM, &parm, "S_PARM") < 0) return -1;
+  c->stream = parm.parm.capture.extendedmode;
+  LOGV("    fh stream_id (from S_PARM) = %u\n", c->stream);
 
   struct v4l2_format fmt; memset(&fmt, 0, sizeof fmt);
   fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -472,8 +479,10 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   if (csid_cfg(c->csidfd, i) < 0) return -1;
   usleep(2000);
 
+  // The vendor sends security_mode=1 here, not 0. IOMMU_ATTACH is 0 in the enum, so
+  // iommu_attach_mode=0 was already correct -- it was security_mode that was wrong.
   struct msm_vfe_smmu_attach_cmd sm; memset(&sm, 0, sizeof sm);
-  sm.security_mode = 0; sm.iommu_attach_mode = IOMMU_ATTACH;
+  sm.security_mode = 1; sm.iommu_attach_mode = IOMMU_ATTACH;
   xioctl(c->vfefd, VIDIOC_MSM_ISP_SMMU_ATTACH, &sm, "SMMU_ATTACH");
 
   // Each VFE has multiple RDI interfaces (VFE_RAW_0/1/2) and two cameras share a VFE here
@@ -499,8 +508,14 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   if (xioctl(c->vfefd, VIDIOC_MSM_ISP_REQUEST_STREAM, &req, "ISP_REQUEST_STREAM") < 0) return -1;
   c->axi_handle = req.axi_stream_handle;
 
+  // sub.type is an ISP event BITMASK here, not a v4l2 event type -- msm_isp_process_event_
+  // subscription() walks it bit by bit against ISP_EVENT_MASK_INDEX_*. Passing V4L2_EVENT_ALL (0)
+  // matches ISP_EVENT_SUBS_MASK_NONE, so it subscribed to NOTHING and returned success, which the
+  // kernel logged as "Subs event_type is None=0x0" -- a message that was visible in dmesg for
+  // several debug cycles before its meaning was chased down. 0x1dff is the mask the vendor uses
+  // (STATS_NOTIFY, ERROR, IOMMU_P_FAULT, STREAM_UPDATE_DONE, REG_UPDATE, SOF, BUF_DIVERT, ...).
   struct v4l2_event_subscription sub; memset(&sub, 0, sizeof sub);
-  sub.type = V4L2_EVENT_ALL;
+  sub.type = 0x1dff;
   xioctl(c->vfefd, VIDIOC_SUBSCRIBE_EVENT, &sub, "SUBSCRIBE_EVENT");
 
   struct msm_isp_buf_request br; memset(&br, 0, sizeof br);
@@ -567,6 +582,21 @@ int main(int argc, char **argv) {
   if (discover(&sd) < 0) { fprintf(stderr, "[-] media graph discovery failed\n"); return 1; }
 
   // Tell the kernel there is no camera daemon, so camera_v4l2_s_parm does not wait for one.
+  // Hold msm_sensor_init open for the session. notes/11 attributes the in-kernel OV7251 CCI/I2C
+  // bring-up to "the msm_sensor_init subdev probe", and neither trace shows ioctls on it -- so if
+  // it matters at all, it matters at open() time. Cheap to hold; harmless if irrelevant.
+  int sinitfd = -1;
+  { char nm[64];
+    for (int k = 0; k < 32; k++) {
+      char node[32]; snprintf(node, sizeof node, "v4l-subdev%d", k);
+      if (sysfs_name(node, nm, sizeof nm) == 0 && !strcmp(nm, "msm_sensor_init")) {
+        char dev[40]; snprintf(dev, sizeof dev, "/dev/%s", node);
+        sinitfd = open(dev, O_RDWR);
+        LOGV("[%c] opened %s (msm_sensor_init) -> fd %d\n", sinitfd < 0 ? '-' : '+', dev, sinitfd);
+        break;
+      }
+    } }
+
   int cfgfd = open("/dev/video0", O_RDWR);
   if (cfgfd >= 0) {
     struct msm_v4l2_event_data ed; memset(&ed, 0, sizeof ed);
@@ -627,6 +657,22 @@ int main(int argc, char **argv) {
     }
     usleep(2000);
   }
+  // Decisive diagnostic: read the ION buffers DIRECTLY, regardless of DQBUF. This separates
+  // "hardware never captured anything" from "hardware captured fine but the buffer-done handoff
+  // back to userspace is broken" -- two completely different bugs that look identical from DQBUF.
+  printf("\n[ION buffer contents, read directly - bypasses DQBUF entirely]\n");
+  for (int i = 0; i < ncam; i++) {
+    for (int b = 0; b < NBUF; b++) {
+      const unsigned char *px = cams[i].buf[b].va;
+      if (!px) continue;
+      unsigned long sum = 0; unsigned nz = 0;
+      for (int k = 0; k < FRAME_SZ; k++) { sum += px[k]; if (px[k]) nz++; }
+      printf("  cam%d buf%d: mean=%.2f nonzero=%u/%d %s\n", i, b,
+             (double)sum / FRAME_SZ, nz, FRAME_SZ,
+             nz ? "<-- HAS DATA" : "(all zero)");
+    }
+  }
+
   printf("\n[frames dequeued] ");
   for (int i = 0; i < ncam; i++) printf("cam%d=%d ", i, got[i]);
   printf("\n");

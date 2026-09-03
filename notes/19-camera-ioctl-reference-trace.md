@@ -510,3 +510,91 @@ the working camera path for all stock-OS work. B2 is only required for the OS sw
 is better resumed there — a from-scratch kernel build is a natural point to add real
 `pr_info`/`CDBG` instrumentation to the driver rather than inferring behaviour from a userspace
 ioctl trace, which is close to the ceiling of what that method can resolve.
+
+## Session 4: full payload diff finds four more real bugs; buffer binding SOLVED
+
+Spot-checking eight ioctls' payloads had missed things. Doing a **full positional payload diff** of
+every cam0 ioctl (both traces, byte-compared against the compiled structs) found four more genuine
+bugs. All are fixed. The `configuring scratch` fallback is now **gone** — buffer binding is
+correct at last — but the ION buffers still come back all-zero, so CSI data is genuinely not
+reaching the VFE.
+
+### Fixed: `SUBSCRIBE_EVENT` was subscribing to nothing
+
+`sub.type` is an **ISP event bitmask**, not a v4l2 event type. `msm_isp_process_event_subscription()`
+walks it bit-by-bit against `ISP_EVENT_MASK_INDEX_*`. Passing `V4L2_EVENT_ALL` (0) matches
+`ISP_EVENT_SUBS_MASK_NONE`, so it subscribed to **nothing** and returned success. The kernel said
+so plainly — `Subs event_type is None=0x0` sat in dmesg for several debug cycles before its meaning
+was chased down. Vendor sends `0x1dff`. A reminder that "returns 0" and "did something" are
+different claims.
+
+### Fixed: duplicate video-node open → wrong `stream_id`
+
+The decisive find. `camera_v4l2_s_parm()` writes the fh's stream_id back into
+`parm.capture.extendedmode`; decoding it showed **vendor=1, ours=2**. An earlier restructure had
+left *two* "second open" blocks, so the node was opened three times and the streaming handle landed
+on `stream_id 2` while `ISP_REQUEST_BUF` created the bufq for the hardcoded `1`. Nothing errored —
+the bufq was created, `ADD_BUFQ` bound it — and every frame went to a scratch buffer.
+
+Now fixed twice over: the duplicate open is removed, **and** `stream_id` is read back from
+`S_PARM` rather than assumed. Hardcoding it was the original sin; the kernel hands you the answer.
+
+### Fixed: `ISP_SMMU_ATTACH` security_mode
+
+Vendor sends `security_mode=1`; we sent 0. (`IOMMU_ATTACH` is 0 in the enum, so
+`iommu_attach_mode=0` was already right — it was the other field.)
+
+### Fixed: RDI interface assignment (see session 3) — only visible with 4 cameras
+
+Restated because it is the clearest methodological lesson: two cameras share each VFE, and
+hardcoding `VFE_RAW_0` made the *second* camera on a VFE fail `ISP_INPUT_CFG` with `EINVAL`. Every
+single-camera debug run before that passed, because a lone camera on an idle VFE always gets
+`RAW_0`. **The bug was invisible at the test size being used.**
+
+## Confirmed: this is no longer a buffer-handoff problem
+
+Added a direct ION readback that bypasses `DQBUF` entirely — mapping the buffers and reading them
+regardless of what the v4l2 queue says. This cleanly separates "hardware never captured" from
+"captured but the handoff back to userspace is broken":
+
+```
+cam0 buf0..3: mean=0.00  nonzero=0/307840  (all zero)
+```
+
+**All four buffers are untouched.** Combined with `configuring scratch` being gone (so the ISP
+*is* programming real buffer addresses into ping-pong) and CSID showing only `0x800`
+(reset-done) interrupts, the remaining fault is upstream of the VFE write path: the sensor is not
+emitting CSI data, or CSID/ISPIF is not accepting it.
+
+Control re-verified in the same session: **B1 still delivers frames** on this exact hardware
+(`cam_direct all` → 4 cameras, non-zero means), so the sensors, MCU strobe and hardware are fine
+and the baseline is live. The MCU command sequence is also proven independently, since B1 was run
+with `SYNCBOSS_RAW=1` — our own packet implementation.
+
+### Also ruled out this session
+
+- **Holding `msm_sensor_init` (v4l-subdev8) open** — `notes/11` attributes in-kernel OV7251 CCI/I2C
+  bring-up to that subdev's probe, and neither trace issues ioctls on it, so open() was the only
+  remaining way it could matter. Tested; no change. Kept in the code as harmless.
+- The kernel genuinely does `copy_from_user` through `lut_params.vc_cfg[i]` pointers
+  (`msm_csid.c:748`), so the stack-allocated `vc_cfg` with `dt=0x2a` reaches CSID correctly —
+  the inline `vc_cfg_a[]` is not the path used.
+- Every remaining payload difference in the full diff is accounted for: union pointer *values*
+  (expected to differ), the ION fd in `ENQUEUE_BUF` (expected), and two parse artifacts from the
+  tracer's own appended `deref=`/`extderef=` fields.
+
+## Honest status
+
+Six real bugs found and fixed across sessions 3–4, and the buffer-binding failure — which produced
+the single most misleading symptom in this whole effort — is definitively solved. The pipeline is
+now byte-identical to the vendor's in ordering and payloads, with correct RDI routing, correct
+stream ids, and correct event subscription.
+
+What remains is not visible from userspace. The buffers being *untouched* rules out the entire
+buffer-handoff chain and points upstream to sensor CSI emission or CSID/ISPIF acceptance — neither
+of which exposes state to userspace on this kernel. Resolving it needs driver-side `pr_info` in
+`msm_csid_irq`/`msm_ispif`/`msm_isp_axi_util`, which needs a kernel rebuild and flash: explicitly
+out of scope under the standing rules, and better done during the OS-swap kernel work anyway
+(`notes/16`), where a rebuild is happening regardless.
+
+B1 remains the working camera path for all stock-OS work; nothing downstream is blocked.
