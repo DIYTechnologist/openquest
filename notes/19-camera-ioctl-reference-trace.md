@@ -107,3 +107,56 @@ reports `sizeimage=307840` = 640×481 mono8, matching what the frames actually a
 `msm_vfe_input_cfg` (172 B), `msm_vfe_axi_stream_request_cmd` (144 B) and `msm_ispif_cfg_data`
 (368 B). All three are captured in full in the trace and all three structs are in the published
 headers, so this is offline work — no further device time is needed to design the reimplementation.
+
+## Full decode: the B2 configuration in named parameters (step 1.3 design COMPLETE)
+
+`tools/cam_kernel/decode_payloads.c` compiles against the same published headers the device uses,
+so field offsets come from the compiler rather than from counting bytes. Every parameter B2 needs
+is now a named value rather than a captured byte blob:
+
+**ISPIF** (`/dev/v4l-subdev12`)
+
+| cfg_type | payload |
+|---|---|
+| `SET_VFE_INFO` (10) | `num_vfe = 2` |
+| `INIT` (2) | `csid_version = 0x50000000` (CSID v5.0) |
+| `CFG` (3) | 1 entry: `vfe_intf=0, intftype=RDI0, num_cids=1, cids=[0], csid=0, crop_enable=0` |
+| `START_FRAME_BOUNDARY` (4) | same entry |
+| `STOP_IMMEDIATELY` (7) | same entry |
+
+**ISP / VFE** (`/dev/v4l-subdev10`, `11`)
+
+```
+INPUT_CFG      input_src = VFE_RAW_0, input_pix_clk = 48 000 000
+               rdi_cfg { cid = 0, frame_based = 1 }
+REQUEST_STREAM session = 3, stream = 1, output_format = 'GREY',
+               stream_src = RDI_INTF_0, frame_base = 1, init_frame_drop = 0
+```
+
+`plane_cfg` is all zeros — for a frame-based RDI stream the plane geometry is unused, which is why
+`sizeimage` comes from `S_FMT` instead.
+
+**CSI** (from the pointer-follow above): CSIPHY `lane_cnt=1, lane_mask=0x0e`; CSID `lane_cnt=1,
+lane_assign=0x4320`, one CID; `phy_sel` 0,1,2,2 across the four cameras.
+
+**Video node**: `REQBUFS count=4, type=9 (V4L2_BUF_TYPE_PRIVATE), memory=2 (USERPTR)`, `QBUF` ×4,
+`STREAMON`.
+
+### The shape of the answer
+
+The Quest drives its tracking cameras through the **RDI (raw dump) path, not CAMIF** —
+`stream_src=RDI_INTF_0`, `input_src=VFE_RAW_0`, `intftype=RDI0`, `frame_based=1`. That is the
+simplest path the VFE offers: no demosaic, no scaling, no statistics, just CSI frames written
+straight to memory. For B2 that is very good news — the entire ISP pixel-processing configuration,
+which is where the vendor complexity would normally live, is simply not used.
+
+Per-camera the only things that vary are the subdev indices, `phy_sel`, `csid`, `vfe_intf`
+(cameras 0,1 → VFE0; 2,3 → VFE1) and the RDI interface number. Everything else is constant.
+
+### Union decoding: the same trap twice
+
+`ispif_cfg_data`'s union member depends entirely on `cfg_type`. Reading it as `params`
+unconditionally made `ISPIF_INIT` report `num=1342177280`, which is really
+`csid_version=0x50000000` — the same value that, one bug earlier, was being dereferenced as a
+pointer. **Decode the tag before the member.** Both mistakes produced confident, wrong output
+rather than an error.
