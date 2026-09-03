@@ -1,0 +1,294 @@
+# Execution plan — measurable milestones — 2026-09-03
+
+Strategy (`notes/17`): replace Meta's services one at a time on the stock OS, so the OS swap
+becomes a **port of known-working code** with a known-good fallback. Every replacement is built as
+**portable core + thin Meta adapter**; only the adapter is throwaway.
+
+Each step below has **acceptance criteria that are falsifiable** — a number or a binary condition —
+plus kill criteria, so we can tell forward progress from motion. Steps needing the headset are
+marked ⚠; per the standing rules, prompt and wait for "go".
+
+---
+
+## Scoreboard
+
+| # | Step | State | Headline metric | Now |
+|---|---|---|---|---|
+| 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
+| 1 | Direct-kernel camera (B2) | not started | Meta libs mapped during capture | 3 |
+| 2 | Ground truth vs Meta | not started | ATE RMSE vs Meta poses | unknown |
+| 3 | Controllers | not started | button decode agreement | 0 % |
+| 4 | `trackingservice` in place | not started | Meta shell on our poses | no |
+| 5 | OS swap | not started | boots + tracks + streams | no |
+| X | Real-time budget | not started | VIO ms/frame on-device vs 33.3 | unknown |
+
+---
+
+## Step 1 — Direct-kernel camera path (B2)
+
+**Objective.** Drive all four cameras with **zero Meta userspace blobs**. Retires
+`libqcameraoculushal.so`, `libqcameradriver.so`, `libsyncboss.so`.
+
+**Why first.** `notes/16`: no vendor partition, so the OS swap deletes `/vendor`. This is the one
+component where "build on the old OS, port later" only works if we go to the kernel. Also far
+easier now, with B1 present to diff against.
+
+**Why it is cheaper than it looks** (all established in `notes/11`):
+- **No GPL gap.** `oculus,camera` is published: `drivers/staging/oculus/mcu/syncboss/syncboss_camera.c`.
+  Full tree in `work/oculus-kernel/`.
+- **The OV7251 register tables are not needed.** Sensor power-up and CCI/I2C init happen in-kernel
+  via the `msm_sensor_init` subdev probe. This was the single biggest feared RE cost and it is gone.
+- **The ioctl set is already enumerated**: `VIDIOC_MSM_CSIPHY_IO_CFG`, `VIDIOC_MSM_CSID_IO_CFG`,
+  `VIDIOC_MSM_ISPIF_CFG{,_EXT}`, `VIDIOC_MSM_ISP_{INPUT_CFG,REQUEST_STREAM,CFG_STREAM,AHB_CLK_CFG}`,
+  plus stock `S_FMT/S_PARM/REQBUFS/QBUF/DQBUF/STREAMON`. All in the published tree.
+- **MCU control is partly done already.** `cam_direct` already emits a raw type-41 write to
+  `/dev/syncboss0` (`raw syncboss CAMERA_RELEASE (type 41) -> write 3` in the capture log).
+  Type 40 = power on, 41 = off; `/dev/syncboss_control0` is the open channel from the IMU work.
+
+**Tasks**
+1. **1.1 Reference trace.** Add an `ioctl` interposer (`LD_PRELOAD` or a wrapper in `cam_direct`)
+   logging every ioctl during a successful B1 session: fd → subdev path, request code, decoded
+   payload struct, ordering, return.
+2. **1.2 MCU control open.** Replace all `libsyncboss.so` calls (`set_frame_rate`,
+   `set_exposure_gain`, `start_streaming`, probe/release) with raw `/dev/syncboss0` writes.
+3. **1.3 Pipeline open.** Reimplement the `libqcameradriver.so` role: CSIPHY → CSID → ISPIF → ISP
+   config, then `REQBUFS`/`QBUF`/`DQBUF`/`STREAMON` buffer pumping, against the published headers.
+4. **1.4 Parity.** All 4 sensors, 30 Hz, FSIN-synced, 640×481 mono8.
+
+**Acceptance criteria**
+- [ ] `grep -ci oculus /proc/self/maps` during capture = **0** (no Meta lib mapped, not merely unused)
+- [ ] ≥ **99 %** frame delivery over a 60 s run, vs B1 on the same duration
+- [ ] FSIN sync preserved: cameras pair into **two groups of two**, byte-identical timestamps within
+      a group, **< 200 µs** between groups (B1 measured ~80 µs)
+- [ ] Frames byte-comparable to B1 for a static scene: mean abs difference **< 2 LSB**
+- [ ] A dataset built through `build_euroc_direct.py` from B2 frames drives OpenVINS to a
+      **bounded** trajectory (final ‖p‖ < 2 m on a table-start capture), i.e. no regression vs step 0
+
+**Kill criteria.** An ioctl or config path is required that is *not* in the published tree, or the
+ISP requires an opaque firmware/config blob we cannot construct. If hit: fall back to B1 for the
+stock OS and re-scope the camera work as part of the mainline-kernel effort instead.
+
+**Needs headset:** device runs only, no handling. Not marked ⚠.
+
+---
+
+## Step 2 — Ground truth against Meta's tracker
+
+**Objective.** Turn "converged and self-consistent" (`notes/14`) into an **accuracy number**.
+
+**Why now.** Meta's production tracker runs on the same rig and sensors and its output is readable —
+this is the absolute reference `notes/14` concluded we lacked:
+```
+trackinginterface_cli getHeadTrackingData [prediction_ms] [json]     # shared memory
+dumpsys tracking                                                     # pose, vel, accel
+```
+
+**The blocker to solve first.** `cam_direct` needs `trackingservice` **stopped** (`/dev/video0` is
+single-open), so Meta's poses and our raw sensors cannot be captured simultaneously by that route.
+Options, in order of preference:
+1. Revive the in-process **leech** (`notes/09`, `notes/10`), which read trackingservice's shared
+   dmabufs while it ran. Abandoned for lossy frame↔timestamp linking; the "ATOMIC hook" in
+   `notes/08` was the intended fix. A fraction of frames is sufficient for drift comparison.
+2. Non-simultaneous (same route walked twice) — much weaker; use only if 1 fails.
+
+**Tasks**
+1. ⚠ Confirm the `getHeadTrackingData` JSON schema with the headset **worn** (it returned `{}` on a
+   desk: proximity gates tracking to STANDBY/0DOF).
+2. Build a pose logger sampling Meta at ≥ 30 Hz with timestamps on the tracking clock.
+3. Revive the leech to capture frames + IMU *while* trackingservice runs.
+4. ⚠ Worn capture, ≥ 2 minutes, including translation and fast rotation.
+5. Compare: time-align, then ATE/RPE against Meta.
+
+**Acceptance criteria**
+- [ ] Meta poses logged at ≥ 30 Hz for ≥ 120 s with < 1 % dropped samples
+- [ ] Our VIO runs on frames captured **in the same session** as those poses
+- [ ] **ATE RMSE reported** with a stated alignment method (this is the deliverable — a number, not
+      a threshold to pass)
+- [ ] **Drift rate in m/min** over ≥ 2 minutes — currently completely unknown
+- [ ] Relative pose error over 1 s windows, to separate local accuracy from slow drift
+
+**Kill criteria.** If the leech cannot link ≥ 20 % of frames cleanly, drop to option 2 and label the
+result as indicative only.
+
+**Needs headset:** ⚠ yes, worn, ~2 min.
+
+---
+
+## Step 3 — Controllers
+
+**Objective.** Decode controller tracking and buttons ourselves. `notes/01` rates this our
+**lowest-confidence** area, and VR games require it — highest chance of an unpleasant surprise, so
+find out early.
+
+**Leads.** `trackinginterface_cli getcontrollertrackingdata / getcontrollerbuttondata [json]` gives
+a reference. `vendor.oculus.hardware.sensors@1.0::IControllerProvider` is the HAL seam. Controllers
+reach the SoC via the **SyncBoss MCU** (proprietary 2.4 GHz radio on the MCU side), and we already
+own `/dev/syncboss_stream0`.
+
+**Tasks**
+1. ⚠ With a controller paired and awake, dump `getcontrollertrackingdata` / `getcontrollerbuttondata`
+   to establish the reference format.
+2. Identify controller packet types in the syncboss stream (we already decode type 0x50 IMU); look
+   for types carrying button/IMU/pose payloads.
+3. Decode buttons first (discrete, trivially verifiable), then controller IMU, then pose.
+4. Determine whether controller **pose** is fused on the MCU, in `trackingservice`, or from camera
+   IR blobs — this decides whether we must implement constellation tracking ourselves.
+
+**Acceptance criteria**
+- [ ] Every button/trigger/thumbstick decoded from the raw stream matches Meta's reported state
+      **100 %** over ≥ 50 discrete events
+- [ ] Controller IMU decoded, with rate and units confirmed against Meta's reported values
+- [ ] **Documented answer** to where 6DoF controller pose is computed (the key architectural unknown)
+- [ ] If camera-based: quantified — how many IR blobs per frame in the short-exposure frames we
+      currently discard
+
+**Kill criteria.** If pose fusion is entirely inside `libtrackingengines.so` with no usable
+intermediate, controller 6DoF becomes its own research project; record and de-scope to 3DoF +
+buttons for the first milestone.
+
+**Needs headset:** ⚠ yes, plus a paired controller.
+
+---
+
+## Step 4 — Replace `trackingservice` in place
+
+**Objective.** Meta's own shell and compositor running on **our** poses, on the stock OS. The single
+most convincing proof the core is correct.
+
+**Prerequisites:** steps 1 and 2, plus the real-time budget (step X).
+
+**Tasks**
+1. Probe `TrackingDataInjection`
+   (`oculus.internal.virtual_input.ITrackingDataInjectionService`) — if it accepts external poses,
+   it is a large shortcut and needs no RE of the producer side.
+2. If not: enumerate `oculus.internal.tracking.ITrackingService` transactions and implement the
+   adapter, registering under the same name.
+3. Run our VIO as a daemon at frame rate, feeding poses in.
+
+**Acceptance criteria**
+- [ ] `dumpsys tracking` reports **our** poses, `Valid: Yes`, `Tracking Level: 6DOF`
+- [ ] Meta's shell renders and responds to head motion for ≥ 10 minutes without losing tracking
+- [ ] Motion-to-photon latency measured and within **2×** of stock (method stated)
+- [ ] Zero crashes of `com.oculus.systemdriver` over a 10-minute session
+
+**Kill criteria.** If neither injection nor the Binder interface is practical, skip in-place
+replacement — it is throwaway adapter work — and go straight to Monado.
+
+**Needs headset:** ⚠ yes, worn.
+
+---
+
+## Step 5 — OS swap
+
+**Objective.** Newer Android + our ported cores.
+
+**Do not start until** steps 1–4 have shipped their cores, because `notes/16` established the swap
+deletes `/vendor` entirely, so nothing there is inheritable.
+
+**Tasks**
+1. Meta GPLv2 kernel source → `monterey` device tree (`CONFIG_OCULUS_SWD_SYNCBOSS` is the lever).
+2. AOSP/LineageOS for `monterey`. Recent Android on a 4.4 kernel is feasible in the LineageOS
+   sense — mainlining is **not** a prerequisite, though it is the cleaner end state.
+3. Rebuild the vendor HAL layer (unavoidable — no vendor partition).
+4. Port the cores from steps 1–4. Adapters are discarded here by design.
+5. Monado as OpenXR runtime; ALVR as the first real workload.
+
+**Acceptance criteria**
+- [ ] Boots to a usable shell on the newer OS
+- [ ] Our camera + IMU stack streams (step 1 core, unmodified)
+- [ ] Our VIO produces 6DoF at frame rate (step 4 core, unmodified)
+- [ ] Monado passes `hello_xr`
+- [ ] **ALVR streams SteamVR with tracked head motion** — the actual end-user goal
+- [ ] Meta blobs remaining: **0** above the firmware floor (PBL/XBL/zap/DSP/Wi-Fi remain)
+
+**Needs headset:** ⚠ yes, and it is the first step that risks an unbootable device — full backup and
+a verified recovery path before flashing.
+
+---
+
+## Step X — Real-time budget (cross-cutting, do early)
+
+**Objective.** Retire the largest unexamined project risk: nothing has ever run on the Quest's own
+CPU. If OpenVINS cannot hit frame rate on a Snapdragon 835, step 4 is impossible and the
+architecture needs rethinking — better to know before building on it.
+
+**Tasks**
+1. Cross-compile OpenVINS + our runner for arm64 Android.
+2. Run the existing `vio-table2` dataset on-device, timing per frame.
+3. Profile: front-end vs update vs marginalisation.
+
+**Acceptance criteria**
+- [ ] **Median per-frame time measured on-device**, against the 33.3 ms budget at 30 Hz
+- [ ] Sustained run without thermal throttling over ≥ 5 minutes, with CPU clocks logged
+- [ ] If over budget: a costed list of options (lower `max_slam`, fewer features, downsampling,
+      DSP/GPU offload) with measured savings for each
+
+**Kill criteria.** If > 3× budget even after tuning, escalate: either a lighter estimator or DSP
+offload becomes its own workstream.
+
+**Needs headset:** device runs only.
+
+---
+
+## Dependencies and parallelism
+
+The plan is **not** a chain. Only two real dependency edges exist; the rest is parallelisable.
+
+| Step | Hard depends on | Blocks | Notes |
+|---|---|---|---|
+| **1** B2 camera | *nothing* — B1 is the reference to diff against | 5 | Independent of 2, 3, X |
+| **2** Ground truth | *nothing* — uses the **leech**, not `cam_direct` | — | See below; commonly mis-assumed to need 1 |
+| **3** Controllers | *nothing* — syncboss stream is already ours | 5 (partially) | Button/IMU decode needs no cameras |
+| **X** Real-time | *nothing* — runs the existing `vio-table2` dataset | **4** | Cheap, and can invalidate 4 |
+| **4** `trackingservice` | **X**, plus *a* camera path (B1 is fine) | 5 | Does not need B2 |
+| **5** OS swap | **1**, **3**, **4**'s core | — | Needs kernel-based camera; `/vendor` is gone |
+
+```
+        ┌── 1 (B2 camera) ─────────────────────────┐
+        │                                          │
+        ├── 3 (controllers) ───────────────────────┤
+start ──┤                                          ├──> 5 (OS swap)
+        ├── X (real-time) ──> 4 (trackingservice) ─┘
+        │
+        └── 2 (ground truth) ──> [validation only, blocks nothing]
+```
+
+**Two non-obvious points, both of which unlock parallelism:**
+
+1. **Step 2 does not depend on step 1.** It deliberately uses the leech path — which reads frames
+   *while `trackingservice` runs* — precisely because Meta's poses and our sensors must be captured
+   simultaneously. `cam_direct` (and therefore B2) is the wrong tool for step 2 by construction.
+2. **Step 4 does not depend on step 1.** It needs *a* camera path, and B1 already works. B2 matters
+   for the OS swap (step 5), not for the in-place demo.
+
+**Critical path: X → 4 → 5**, with **1** and **3** running alongside as independent long poles.
+Step 1 is likely the longest single item, so starting it early matters more than sequencing it first.
+Step 2 is off the critical path entirely — it is validation, and blocks nothing.
+
+### Parallel tracks
+
+| Track | Work | Device need | Can start |
+|---|---|---|---|
+| **A** | Step 1: ioctl trace → MCU control → pipeline reimplementation | runs only, no handling | **now** |
+| **B** | Step X: cross-compile OpenVINS arm64, time on-device | runs only | **now** |
+| **C** | Step 2 prep: revive the leech, build the Meta pose logger | runs only | **now** |
+| **D** | Step 3 prep: syncboss stream survey for controller packet types | runs only | **now** |
+| **E** | Steps 2 + 3 capture: one worn session | ⚠ worn, controllers | after C and D |
+| **F** | Step 4: injection probe → daemon | ⚠ worn | after B |
+
+Tracks A–D have **no prerequisites and no dependencies on each other** — all four can proceed
+concurrently today. Only E and F need to wait, and E waits on tooling (C, D) rather than on any
+result.
+
+### Suggested order for a single worker
+
+**A and B first (interleaved), then C+D, then one E session, then F, then 5.**
+
+Rationale: step 1 (A) is the longest pole and structural; X (B) is cheap and can invalidate step 4,
+so pay for it before building there. C and D are tooling for the one expensive user-in-the-loop
+event, so they should be ready before it, not after.
+
+**Efficiency note.** Captures are the expensive, user-in-the-loop operation, so **E should be a
+single session** serving both steps 2 and 3: worn, ≥ 2 min, controllers paired and exercised,
+correct exposure (`e3000_g160` for a bright room — `notes/15`; the `e8000_g255` every capture has
+used saturates 11–47 % of pixels), and 4-camera if step 1 has landed by then.
