@@ -101,6 +101,31 @@ static void do_ispif_cfg(const unsigned char *b, int n) {
   }
 }
 
+// CSI params live behind the union pointer; ioctl_trace captures them as a trailing "deref=" field.
+// Decoding these by eye went wrong twice (settle_cnt read as lane_mask), so they get the same
+// compiler-checked treatment as everything else.
+static void do_csiphy(const unsigned char *b, int n) {
+  struct msm_camera_csiphy_params c; memset(&c, 0, sizeof c);
+  memcpy(&c, b, n < (int)sizeof c ? n : (int)sizeof c);
+  printf("    lane_cnt=%u settle_cnt=%u lane_mask=0x%04x combo_mode=%u csid_core=%u "
+         "csiphy_clk=%u csi_3phase=%u data_rate=%llu\n",
+         c.lane_cnt, c.settle_cnt, c.lane_mask, c.combo_mode, c.csid_core,
+         c.csiphy_clk, c.csi_3phase, (unsigned long long)c.data_rate);
+}
+static void do_csid(const unsigned char *b, int n) {
+  struct msm_camera_csid_params c; memset(&c, 0, sizeof c);
+  memcpy(&c, b, n < (int)sizeof c ? n : (int)sizeof c);
+  printf("    lane_cnt=%u lane_assign=0x%04x phy_sel=%u csi_clk=%u csi_3p_sel=%u num_cid=%u\n",
+         c.lane_cnt, c.lane_assign, c.phy_sel, c.csi_clk, c.csi_3p_sel, c.lut_params.num_cid);
+  // lut_params.vc_cfg is an array of POINTERS into the traced process, so the vc/dt entries are
+  // not recoverable from this trace -- following them here segfaulted the decoder, the third time
+  // a pointer inside one of these unions has bitten. ioctl_trace would need to chase them at
+  // capture time. Reported as a known gap rather than silently printing garbage.
+  if (c.lut_params.num_cid)
+    printf("      (%u vc_cfg entries live behind pointers; not captured -- see notes/19)\n",
+           c.lut_params.num_cid);
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) { fprintf(stderr, "usage: %s <ioctl_trace.log>\n", argv[0]); return 1; }
   FILE *f = fopen(argv[1], "r");
@@ -116,6 +141,23 @@ int main(int argc, char **argv) {
     unsigned char b[4096];
     int n = unhex(hex, b, sizeof b);
     if (n <= 0) continue;
+    // deref= is appended after the payload for the CSI configs
+    char *dr = strstr(line, "deref=");
+    if (dr) {
+      unsigned char db[256]; int dn = unhex(dr + 6, db, sizeof db);
+      // GATE ON cfgtype. This is the fourth time a tagged union has produced confident nonsense:
+      // only CSIPHY_CFG / CSID_CFG carry a params pointer, and decoding the INIT calls' unions as
+      // params yielded lane_cnt=32, settle_cnt=67, data_rate=9369376207381987455 -- values obvious
+      // enough to catch, which is luck, not method. Read the tag, then the member. Every time.
+      unsigned int cfgtype = 0;
+      { unsigned char pb[16]; if (unhex(hex, pb, sizeof pb) >= 4) memcpy(&cfgtype, pb, 4); }
+      static int sp = 0, sc = 0;
+      if (!strcmp(name, "VIDIOC_MSM_CSIPHY_IO_CFG") && cfgtype == CSIPHY_CFG && sp++ < 4) {
+        printf("VIDIOC_MSM_CSIPHY_IO_CFG (cfgtype=CSIPHY_CFG) deref\n"); do_csiphy(db, dn);
+      } else if (!strcmp(name, "VIDIOC_MSM_CSID_IO_CFG") && cfgtype == CSID_CFG && sc++ < 4) {
+        printf("VIDIOC_MSM_CSID_IO_CFG (cfgtype=CSID_CFG) deref\n"); do_csid(db, dn);
+      }
+    }
     if (!strcmp(name, "VIDIOC_MSM_ISP_REQUEST_STREAM") && !seen_req++) {
       printf("VIDIOC_MSM_ISP_REQUEST_STREAM (%d B)\n", n); do_request_stream(b, n);
     } else if (!strcmp(name, "VIDIOC_MSM_ISP_INPUT_CFG") && !seen_in++) {

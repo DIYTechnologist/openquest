@@ -77,13 +77,10 @@ and an unexpected one cannot crash the run.
 
 Recovered configuration, per camera:
 
-| | value |
-|---|---|
-| CSIPHY | `lane_cnt=1`, `lane_mask=0x0e` |
-| CSID | `lane_cnt=1`, `lane_assign=0x4320`, 1 CID entry (`vc/dt` = `01 00 00 00`) |
-| `phy_sel` per camera | **0, 1, 2, 2** |
+> **CORRECTED below.** The first pass here read `lane_mask=0x0e`; that is wrong — `0x0e` is
+> `settle_cnt`, decoded by eye. See the compiler-checked table further down.
 
-So each camera runs a **single CSI lane**, and the four sensors map onto **three CSIPHYs** with two
+Each camera runs a **single CSI lane**, and the four sensors map onto **three CSIPHYs** with two
 sharing phy 2 — consistent with the 3 CSIPHY / 4 CSID / 2 VFE subdev counts in the topology above.
 
 ### Per-camera bring-up order (what 1.3 must replay)
@@ -160,3 +157,44 @@ unconditionally made `ISPIF_INIT` report `num=1342177280`, which is really
 `csid_version=0x50000000` — the same value that, one bug earlier, was being dereferenced as a
 pointer. **Decode the tag before the member.** Both mistakes produced confident, wrong output
 rather than an error.
+
+
+## CSI parameters, compiler-decoded and gated on cfgtype
+
+| cam | CSIPHY | CSID |
+|---|---|---|
+| 0 | `lane_cnt=1 settle_cnt=14 lane_mask=0x0003 combo_mode=0 csid_core=0` | `lane_cnt=1 lane_assign=0x4320 phy_sel=0 num_cid=1` |
+| 1 | same, `csid_core=1` | `lane_assign=0x4320 phy_sel=1` |
+| 2 | same, `csid_core=2` | `lane_assign=0x4320 phy_sel=2` |
+| 3 | `lane_mask=0x0018 combo_mode=1 csid_core=3` | `lane_assign=0x0003 phy_sel=2` |
+
+**Camera 3 shares CSIPHY 2 with camera 2 via combo mode** (`combo_mode=1`, a different
+`lane_mask`, and a different `lane_assign`). That is what the 3-PHY / 4-camera mapping actually
+means, and it is the one place the per-camera configuration is not a simple index substitution.
+
+`csiphy_clk`, `csi_clk` and `data_rate` are all zero — the sensors are FSIN slaves clocked by the
+MCU, so userspace does not program a rate here.
+
+### Known gap
+
+`csid_params.lut_params.vc_cfg[]` is an array of **pointers** into the traced process, so the
+per-CID `vc`/`dt`/`decode_format` values are not recoverable from this trace; `ioctl_trace` would
+have to chase them at capture time. `num_cid=1` for every camera. Following them in the decoder
+segfaulted it, which is how the gap was found.
+
+### The recurring trap, four times over
+
+Every one of these structures is a **tagged union**, and four separate bugs came from reading the
+member before the tag:
+
+1. `csid_cfg_data` cfgtype 0 holds `csid_version 0x50000000`; dereferencing it as a pointer
+   segfaulted the capture.
+2. `ispif_cfg_data` read as `params` made `ISPIF_INIT` report `num=1342177280` — the same
+   `0x50000000`.
+3. `csiphy_cfg_data` on the `INIT` calls decoded as params gave `lane_cnt=32, settle_cnt=67,
+   data_rate=9369376207381987455`.
+4. `lut_params.vc_cfg[]` pointers, above.
+
+Case 3 is the instructive one: those values are absurd enough to notice, but nothing *forced*
+noticing them. Cases where a mis-tagged union yields plausible numbers are the ones that ship.
+**Read the tag, then the member — every time.**
