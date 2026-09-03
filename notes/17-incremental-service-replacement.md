@@ -81,13 +81,26 @@ validation or knowledge rather than permanent code:
   Meta's interface is pure throwaway when the target is Monado's compositor. Skip straight to
   Monado for that layer.
 
-## Two honest caveats
+## Caveats
 
-1. **This does not serve the security motivation.** Two stated motivations for the project are
-   e-waste and closing CVEs; the device is stuck on Android 10 / kernel 4.4.205 (EOL Feb 2022).
-   Incremental service replacement leaves that base entirely intact. It de-risks the *engineering*,
-   it does not deliver the *security* goal — only the OS swap does.
-2. **`devicecert` attestation.** `vendor.oculus.hardware.devicecert@1.0` is flagged in `notes/01` as
+1. **`devicecert` attestation.** `vendor.oculus.hardware.devicecert@1.0` is flagged in `notes/01` as
    something to understand *before* removal. Unknown what it gates; check before disabling services
    that might depend on it. SELinux policy will also need handling per service (we run permissive
    during experiments today, which is not a shippable answer).
+
+2. **No schedule pressure from the EOL base.** The project's stated motivation is e-waste;
+   security is a *consequence* of eventually moving to a newer OS, not a driver. The device being
+   on Android 10 / kernel 4.4.205 (EOL Feb 2022) is therefore not an argument against spending
+   time on the stock OS. Recorded because an earlier draft of this note argued the opposite and
+   was wrong.
+
+## Consequence for sequencing
+
+With security removed as a driver, there is no cost to staying on the stock OS for as long as the
+incremental path keeps paying. That makes the ordering straightforward: do the work that is
+*validated* by Meta's still-running stack first (tracking, controllers), and treat the OS swap as
+the step taken once there is little left to learn from the stock system — not as a deadline.
+
+The one thing that still argues for doing the direct-kernel camera path (`notes/16`) early is not
+schedule but **sequencing**: it is a prerequisite for tracking that survives the OS swap, and it is
+easier to develop while Meta's stack is present to compare against.
