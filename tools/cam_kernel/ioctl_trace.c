@@ -119,6 +119,30 @@ static const char *path_for(int fd, char *buf, size_t cap) {
   return "?";
 }
 
+// Step 1.2 needs the syncboss MCU packet formats that libsyncboss.so sends (set_frame_rate,
+// set_exposure_gain, start_streaming, probe/release). Rather than reverse the library, log the
+// bytes it writes: the packets ARE the ABI. Only syncboss fds are logged, to keep the trace
+// readable -- everything else in this process writes far more.
+ssize_t write(int fd, const void *buf, size_t n) {
+  ssize_t r = syscall(SYS_write, fd, buf, n);
+  if (fd != g_fd) {
+    char pb[64];
+    const char *p = path_for(fd, pb, sizeof pb);
+    if (strstr(p, "syncboss")) {
+      char line[1024];
+      int k = snprintf(line, sizeof line, "%.9f %d %d %s WRITE - 0 0 %d ",
+                       now_s(), (int)syscall(SYS_gettid), fd, p, (int)r);
+      unsigned m = n > 256 ? 256 : (unsigned)n;
+      const unsigned char *q = buf;
+      for (unsigned i = 0; i < m && k < (int)sizeof line - 4; i++)
+        k += snprintf(line + k, sizeof line - k, "%02x", q[i]);
+      k += snprintf(line + k, sizeof line - k, "\n");
+      logbuf(line, (unsigned)k);
+    }
+  }
+  return r;
+}
+
 // bionic declares `int ioctl(int, int, ...)` and marks it overloadable, so this must match that
 // signature exactly or the compiler rejects the definition.
 int ioctl(int fd, int op, ...) {

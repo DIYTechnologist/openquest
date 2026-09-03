@@ -15,7 +15,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 | # | Step | State | Headline metric | Now |
 |---|---|---|---|---|
 | 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
-| 1 | Direct-kernel camera (B2) | **1.1 done** (`notes/19`) | Meta libs mapped during capture | 3 |
+| 1 | Direct-kernel camera (B2) | **1.1, 1.2 done** (`notes/19`) | Meta libs needed by capture | **2** (was 3) |
 | 2 | Ground truth vs Meta | not started | ATE RMSE vs Meta poses | unknown |
 | 3 | Controllers | not started | button decode agreement | 0 % |
 | 4 | `trackingservice` in place | not started | Meta shell on our poses | no |
@@ -48,8 +48,9 @@ easier now, with B1 present to diff against.
 **Tasks**
 1. ~~**1.1 Reference trace.**~~ **DONE** — `tools/cam_kernel/`, 493 ioctls fully decoded,
    `notes/19`. Confirmed the whole path is published kernel ABI: **no unknown-ABI blocker for B2.**
-2. **1.2 MCU control open.** Replace all `libsyncboss.so` calls (`set_frame_rate`,
-   `set_exposure_gain`, `start_streaming`, probe/release) with raw `/dev/syncboss0` writes.
+2. ~~**1.2 MCU control open.**~~ **DONE** — `SYNCBOSS_RAW=1` in `cam_direct` drives the MCU with
+   our own packets; `libsyncboss.so` is never dlopened and all 4 cameras stream. Frame means match
+   the blob path to <0.3 LSB and FSIN pairing is preserved.
 3. **1.3 Pipeline open.** Reimplement the `libqcameradriver.so` role: CSIPHY → CSID → ISPIF → ISP
    config, then `REQBUFS`/`QBUF`/`DQBUF`/`STREAMON` buffer pumping, against the published headers.
 4. **1.4 Parity.** All 4 sensors, 30 Hz, FSIN-synced, 640×481 mono8.

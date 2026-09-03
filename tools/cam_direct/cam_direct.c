@@ -77,6 +77,83 @@ static int syncboss_cam_power(int on) {
   return n == (ssize_t)sizeof pkt ? 0 : -1;
 }
 
+// ── Step 1.2 (notes/18): the MCU command set, WITHOUT libsyncboss.so ─────────────────────────
+//
+// libsyncboss.so is one of the three closed Meta blobs the OS swap will delete (notes/16), so the
+// camera path cannot depend on it. Its whole job is marshalling a handful of packets onto
+// /dev/syncboss0, and the packets are the real ABI — the kernel only snoops types 40/41 to gate
+// camera power (syncboss_spi.c:113) and passes everything else through to the MCU untouched.
+//
+// The formats below were not guessed: they were read off the wire by tracing writes during a
+// working libsyncboss session (tools/cam_kernel, notes/19). Each libsyncboss call maps 1:1 onto
+// one packet, and the traced payloads carry back the exact arguments we passed in — e.g.
+// set_exposure_gain(3000,160) appeared as `2a 00 10 b80b b80b b80b b80b a000 a000 a000 a000`,
+// with 0x0bb8 = 3000 and 0x00a0 = 160.
+//
+// Wire format is uniform: { u8 type, u8 seq, u8 data_len, u8 data[data_len] }.
+// Camera-control ops (0x28/0x2a/0x2c/0x2e) go out with seq 0 and are fire-and-forget; the generic
+// property op 0x03 uses an incrementing seq because the MCU replies to it.
+#define SB_CAM_INIT      0x2e   // camera_init(num_cams)
+#define SB_CAM_START     0x2c   // start_streaming(num_cams)  <-- FSIN strobe
+#define SB_CAM_STOP      0x2d   // stop_streaming
+#define SB_CAM_DEINIT    0x2f   // camera_deinit
+#define SB_CAM_EXPGAIN   0x2a   // set_exposure_gain(u16 exp[4], u16 gain[4])
+#define SB_PROP          0x03   // generic property set, first data byte selects the property
+#define SB_PROP_BPP      0x8c   // set_bpp(n)
+#define SB_PROP_PERIOD   0x89   // set_frame_rate(u32 period_us)
+#define SB_PROP_TAGMODE  0x8d   // set_frame_tag_mode(n)
+
+static unsigned char sb_seq = 0xa0;   // property ops expect a reply; keep the seq moving
+
+static int sb_send(const char *what, unsigned char type, unsigned char seq,
+                   const void *data, unsigned char len) {
+  unsigned char pkt[64];
+  if (len > sizeof pkt - 3) return -1;
+  pkt[0] = type; pkt[1] = seq; pkt[2] = len;
+  if (len) memcpy(pkt + 3, data, len);
+  ssize_t n = write(sb_fd, pkt, (size_t)len + 3);
+  printf("[%c] raw %-22s type=0x%02x len=%u -> %zd\n",
+         n == (ssize_t)len + 3 ? '+' : '-', what, type, len, n);
+  return n == (ssize_t)len + 3 ? 0 : -1;
+}
+
+static int sb_prop(const char *what, unsigned char prop, const void *val, unsigned char vlen) {
+  unsigned char d[8];
+  d[0] = prop;
+  memcpy(d + 1, val, vlen);
+  int rc = sb_send(what, SB_PROP, sb_seq++, d, (unsigned char)(vlen + 1));
+  usleep(20000);            // the MCU answers these; give it the same slack libsyncboss allowed
+  return rc;
+}
+
+// Mirrors syncboss_lib_start() + syncboss_lib_start_streaming(), packet for packet.
+static int sb_raw_setup(int num_cams, uint16_t exposure, uint16_t gain) {
+  unsigned char n8 = (unsigned char)num_cams, bpp = 8, tag = 1;
+  uint32_t period = 33333;                          // microseconds, not Hz (notes/13)
+  int rc = 0;
+  rc |= sb_prop("set_bpp(8)", SB_PROP_BPP, &bpp, 1);
+  rc |= sb_send("camera_init", SB_CAM_INIT, 0, &n8, 1);
+  rc |= sb_prop("set_frame_rate(33333us)", SB_PROP_PERIOD, &period, 4);
+  if (exposure) {
+    uint16_t eg[8] = { exposure, exposure, exposure, exposure, gain, gain, gain, gain };
+    rc |= sb_send("set_exposure_gain", SB_CAM_EXPGAIN, 0, eg, sizeof eg);
+  }
+  rc |= sb_prop("set_frame_tag_mode(1)", SB_PROP_TAGMODE, &tag, 1);
+  return rc;
+}
+
+// Must run AFTER the v4l2 pipeline is up, so the MCU strobes into a listening receiver.
+static int sb_raw_start_streaming(int num_cams) {
+  unsigned char n8 = (unsigned char)num_cams;
+  return sb_send("start_streaming  <-- FSIN", SB_CAM_START, 0, &n8, 1);
+}
+
+static void sb_raw_stop(void) {
+  unsigned char x = 0x98;                            // value libsyncboss sends for both
+  sb_send("stop_streaming", SB_CAM_STOP, sb_seq++, &x, 1);
+  sb_send("camera_deinit",  SB_CAM_DEINIT, sb_seq++, &x, 1);
+}
+
 // ── libsyncboss.so: the MCU command API the HAL itself uses ──────────────────────────────────
 // SensorTraits<Imu>::enableSensor is just a wrapper around syncboss_imu_enable@plt, so the whole
 // MCU command set is this plain-C library (deps: liblog/libm/libdl/libc). Camera probe alone only
@@ -110,8 +187,12 @@ static struct {
 // syncboss_camera_probe+20, which does `ldr x0, [x0, #8]` to take a lock.
 static void *sb_handle;
 static int sb_lib_ready;
+// Step 1.2: SYNCBOSS_RAW=1 drives the MCU with our own packets and never dlopens the blob,
+// so the two paths can be A/B'd on the same hardware in the same session.
+static int sb_raw(void) { const char *e = getenv("SYNCBOSS_RAW"); return e && *e != '0'; }
 
 static int syncboss_lib_start(int num_cams, int fps) {
+  if (sb_raw()) { (void)fps; return sb_raw_setup(num_cams, g_exposure, g_gain); }
   sb.lib = dlopen(SYNCBOSS_LIB, RTLD_NOW);
   if (!sb.lib) { printf("[-] dlopen %s: %s\n", SYNCBOSS_LIB, dlerror()); return -1; }
   printf("[+] dlopen %s -> %p\n", SYNCBOSS_LIB, sb.lib);
@@ -149,6 +230,7 @@ static int syncboss_lib_start(int num_cams, int fps) {
 // Second phase, mirroring MontereyCameraProvider::startCameras(): this must run AFTER the v4l2
 // pipeline is streaming, so the MCU strobes into a receiver that is already listening.
 static int syncboss_lib_start_streaming(int num_cams) {
+  if (sb_raw()) return sb_raw_start_streaming(num_cams);
   if (!sb_lib_ready) return -1;
   // applyFramePeriod() passes a stored u32; 30 was rejected (rc=-1) because this is a PERIOD.
   // Probe a few encodings and keep the first the MCU accepts.
@@ -177,6 +259,7 @@ static int syncboss_lib_start_streaming(int num_cams) {
 }
 
 static void syncboss_lib_stop(void) {
+  if (sb_raw()) { sb_raw_stop(); return; }
   if (!sb_lib_ready) return;
   if (sb.cam_stop)    printf("[*] camera_stop_streaming rc=%d\n", sb.cam_stop(sb_handle));
   if (sb.cam_release) printf("[*] camera_release rc=%d\n", sb.cam_release(sb_handle));
