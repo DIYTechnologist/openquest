@@ -94,13 +94,53 @@ validation or knowledge rather than permanent code:
    time on the stock OS. Recorded because an earlier draft of this note argued the opposite and
    was wrong.
 
-## Consequence for sequencing
+## Why this is the path to the OS swap, not an alternative to it
 
-With security removed as a driver, there is no cost to staying on the stock OS for as long as the
-incremental path keeps paying. That makes the ordering straightforward: do the work that is
-*validated* by Meta's still-running stack first (tracking, controllers), and treat the OS swap as
-the step taken once there is little left to learn from the stock system — not as a deadline.
+Security is **both** a driver and gated. We need off Android 10 / kernel 4.4.205 to fix it, but we
+cannot move until we know the services can be moved. Incremental replacement is what retires that
+risk: each service gets built and proven against the stock OS, so the swap becomes a **port of
+known-working code** rather than a rewrite on an unfamiliar base — with reference data and a
+known-good implementation to A/B against at every step.
 
-The one thing that still argues for doing the direct-kernel camera path (`notes/16`) early is not
-schedule but **sequencing**: it is a prerequisite for tracking that survives the OS swap, and it is
-easier to develop while Meta's stack is present to compare against.
+(Recorded because I first argued the opposite — that this strategy "does not serve the security
+goal". It is the strategy that makes the security goal reachable.)
+
+### Design rule: portable core + thin Meta adapter
+
+The value of building against the stock OS depends entirely on *how* each replacement is
+structured. Conforming to Meta's closed `oculus.internal.*` AIDL is throwaway; the logic behind it
+is not. So architect every replacement as:
+
+- **core** — VIO, controller decode, calibration handling. Depends only on kernel interfaces and
+  our own types. Ports unchanged.
+- **adapter** — registers the Binder service, marshals Meta's AIDL to the core. Deleted at the
+  Monado transition.
+
+Keep the boundary strict and the throwaway fraction stays small.
+
+### When to build a replacement, and when to skip
+
+Build it if we would have to write the core anyway. Skip it if an open implementation already
+exists that we would adopt instead:
+
+| Service | Build? | Because |
+|---|---|---|
+| `trackingservice` | **yes** | Core already written (`notes/14`); nothing open replaces it for this rig |
+| Controllers (`IControllerProvider`) | **yes** | Nobody has this; we must write it regardless |
+| `HMDCalibration` | **yes** | Trivial, and we already have the core |
+| `vrapi_svr` / compositor | **no** | Monado has a compositor. Building one against Meta's interface is throwaway *core*, not just a throwaway adapter |
+
+### The exception: anything depending on `/vendor` does not port at all
+
+`notes/16` established there is no vendor partition, so the OS swap takes `/vendor` with it. That
+breaks the "build against the old version, then port" logic for exactly one class of work:
+**anything built on Meta's vendor blobs.** Our camera path is currently in that class — it
+`dlopen`s `libqcameraoculushal.so`, `libqcameradriver.so` and `libsyncboss.so`.
+
+Build against **kernel** interfaces and the logic holds — `/dev/video0` (msm-config) and the
+syncboss FIFO survive the swap, and are re-creatable on a mainlined kernel. Build against **vendor
+userspace** and it does not port at all.
+
+This is the real argument for doing the direct-kernel camera path early. Not urgency: it is the one
+component where "build it on the old OS first" produces something portable *only* if we go to the
+kernel — and it is far easier to develop while Meta's stack is still present to compare against.
