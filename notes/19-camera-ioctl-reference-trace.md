@@ -363,3 +363,57 @@ this symptom: a correctly-configured pipeline that never receives a packet.
 The diff harness itself is the deliverable here — `run_ck_trace.sh` runs `cam_kernel` under
 `libioctl_trace.so`, and comparing the two traces by count *and* by position is what localised
 every one of the four items above.
+
+## B2: kill criterion reached — parked, with B1 as the working fallback
+
+Both ordering changes from the previous section were implemented, plus a third fix found along the
+way. None produced frames, so per the `notes/18` kill criterion this is parked rather than ground
+on further.
+
+**Implemented since the last update**
+
+1. **Global CSIPHY/CSID INIT sweep up front**, before any per-camera configuration — matching the
+   vendor's shape rather than initialising lazily per camera. This matters on this rig because
+   cameras share PHYs (camera 3 runs combo-mode on CSIPHY 2), so a lazily-initialised PHY can be
+   configured before it is ready.
+2. **CSI configuration moved after `STREAMON` and `AHB_CLK_CFG`**, before the ISP block, as the
+   vendor does.
+3. **Subdev fds are now held open for the whole session.** The first version of the sweep opened
+   each subdev, sent INIT, and closed it — which undoes the init immediately, because the CSID
+   driver releases on last close (`msm_csid_release` in dmesg). A real bug, and worth keeping fixed.
+
+Result: pipeline still comes up cleanly, every ioctl returns 0, kernel log is clean, **no frames**.
+
+### The concrete unexplained discrepancy to start from
+
+`CSID_INIT` behaves differently for us than for the vendor, and this is the sharpest remaining
+thread:
+
+| | vendor | cam_kernel |
+|---|---|---|
+| ioctl return | **10** | 0 |
+| `cfg.csid_version` written back | **0x50000000** | **0x00000000** |
+
+The kernel does `rc = msm_csid_init(csid_dev, &cdata->cfg.csid_version)` (`msm_csid.c:707`) and
+dmesg confirms the hardware read succeeds (`msm_csid_init: CSID_VERSION = 0x30050000`) — yet the
+value never reaches our struct, and the vendor gets a non-zero return code of 10 where we get 0.
+Struct layout is not the explanation: `csid_cfg_data` puts the union at offset 8 on both sides, and
+the vendor's own captured payload carries the version there.
+
+Something about *how* the vendor reaches this call differs from ours. That is where to resume.
+
+Also noted: the vendor's second CSID call is `cfgtype=3` = **`CSID_RELEASE`**, not another config —
+so its CSID lifecycle is init/release-heavy in a way we have not reproduced (`CSID_INIT` ×8,
+`CSID_RELEASE` ×8, `CSID_CFG` ×4 across the session).
+
+### Where this leaves the project
+
+- **B1 still works** and remains the camera path for all stock-OS work (steps 2–4 of `notes/18`).
+  Nothing downstream is blocked by B2 being incomplete.
+- **B2 is only required for the OS swap** (`notes/16`: no vendor partition, so `/vendor` does not
+  survive). It is worth resuming at that point anyway, when the kernel is being rebuilt and the
+  driver side can be instrumented directly instead of inferred from a userspace trace — which is a
+  far better position than reverse-engineering the sequence from outside.
+- Everything needed to resume is committed: the reference trace with all payloads decoded, the
+  `cam_kernel` implementation, and the trace-diff harness (`run_ck_trace.sh`) that localises
+  divergence by position, not just by count.

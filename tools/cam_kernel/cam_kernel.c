@@ -306,6 +306,35 @@ static int ispif_cfg2(int fd, int vfe_intf, int csid) {
   return xioctl(fd, VIDIOC_MSM_ISPIF_CFG_EXT, &c, "ISPIF_CFG2");
 }
 
+// Initialise EVERY CSIPHY and CSID before any per-camera configuration, which is what the vendor
+// does: a full INIT sweep across all subdevs up front, then per-camera CFG later. Doing INIT lazily
+// per camera leaves the other PHYs unpowered, and on this rig cameras share PHYs (camera 3 runs in
+// combo mode on CSIPHY 2), so a lazily-initialised PHY can be configured before it is ready.
+// Fds are opened ONCE and held for the whole session, not opened per call.
+//
+// The first version of this sweep opened each subdev, sent INIT, and closed it. That undoes the
+// init immediately: the CSID driver releases on last close (dmesg shows msm_csid_release), so the
+// version query came back 0x00000000 where the vendor sees a non-zero version, and the hardware was
+// torn down again before any camera was configured.
+static int g_phyfd[MAXCAM], g_csidfd[MAXCAM];
+
+static int csi_init_all(struct subdevs *sd) {
+  for (int i = 0; i < sd->n_csiphy; i++) {
+    g_phyfd[i] = open(sd->csiphy[i], O_RDWR);
+    if (g_phyfd[i] < 0) { perror("open csiphy"); return -1; }
+    csiphy_init(g_phyfd[i]);
+  }
+  for (int i = 0; i < sd->n_csid; i++) {
+    g_csidfd[i] = open(sd->csid[i], O_RDWR);
+    if (g_csidfd[i] < 0) { perror("open csid"); return -1; }
+    uint32_t ver = 0;
+    csid_version(g_csidfd[i], &ver);
+    LOGV("    csid%d version=0x%08x\n", i, ver);
+  }
+  LOGV("[+] INIT sweep: %d csiphy, %d csid (fds held open)\n", sd->n_csiphy, sd->n_csid);
+  return 0;
+}
+
 static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd) {
   char *vp = sd->video[i];
   // O_NONBLOCK: a blocking DQBUF with no frames arriving hangs the process forever, and
@@ -334,15 +363,15 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   if (c->vfd < 0) { fprintf(stderr, "[-] second open %s: %s\n", vp, strerror(errno)); return -1; }
   c->stream = 1;
 
-  c->csidfd = open(sd->csid[i], O_RDWR);
-  c->phyfd  = open(sd->csiphy[PHY_SEL[i]], O_RDWR);
+  // Reuse the session-long fds from the INIT sweep -- reopening would re-run open/release cycles
+  // on hardware that is already initialised.
+  c->csidfd = g_csidfd[i];
+  c->phyfd  = g_phyfd[PHY_SEL[i]];
   c->vfefd  = open(sd->vfe[i / 2], O_RDWR);
-  if (c->csidfd < 0 || c->phyfd < 0 || c->vfefd < 0) { fprintf(stderr, "[-] subdev open\n"); return -1; }
+  if (c->csidfd < 0 || c->phyfd < 0 || c->vfefd < 0) { fprintf(stderr, "[-] subdev fd\n"); return -1; }
 
-  uint32_t ver = 0;
-  csid_version(c->csidfd, &ver);
-  LOGV("[+] cam%d session=%u csid_version=0x%08x  (%s, %s, %s, vfe%d)\n",
-       i, c->session, ver, vp, sd->csid[i], sd->csiphy[PHY_SEL[i]], i / 2);
+  LOGV("[+] cam%d session=%u  (%s, %s, %s, vfe%d)\n",
+       i, c->session, vp, sd->csid[i], sd->csiphy[PHY_SEL[i]], i / 2);
 
   for (int b = 0; b < NBUF; b++)
     if (ion_alloc(&c->buf[b], (FRAME_SZ + 4095) & ~4095u) < 0) return -1;
@@ -385,25 +414,17 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   int type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
   if (xioctl(c->vfd, VIDIOC_STREAMON, &type, "STREAMON") < 0) return -1;
 
-  if (csiphy_init(c->phyfd) < 0) return -1;
-  if (csiphy_cfg(c->phyfd, i) < 0) return -1;
-  if (csid_cfg(c->csidfd, i) < 0) return -1;
-
-  // ── ISP / VFE ──
-  // AHB_CLK_CFG (vote=2) is the first ISP call the vendor makes on each VFE, before SMMU_ATTACH.
-  // It was in the traced sequence but not implemented here; a trace diff of cam_kernel against the
-  // vendor reference is what surfaced it. Sent per camera -- the vendor sends it once per VFE, and
-  // re-voting is harmless.
+  // ORDER MATTERS HERE. The vendor configures CSIPHY/CSID *after* STREAMON and AHB_CLK_CFG and
+  // *before* the ISP block, having already INIT-ed every PHY and CSID globally up front. An earlier
+  // version configured the CSI side before AHB_CLK_CFG and left the global INIT sweep out; every
+  // ioctl still returned 0 and the kernel logged nothing, but no CSI packet ever arrived. A
+  // positional diff of our own trace against the vendor reference is what exposed the difference --
+  // counts alone showed nothing, because the same calls were all present.
   { struct msm_isp_ahb_clk_cfg ahb; memset(&ahb, 0, sizeof ahb); ahb.vote = 2;
     xioctl(c->vfefd, VIDIOC_MSM_ISP_AHB_CLK_CFG, &ahb, "ISP_AHB_CLK_CFG"); }
 
-  // The vendor probes subdev ids on the CSIPHY and CSID before configuring them. The payload is a
-  // bare uint32_t and the returned value is unused by us -- but the call has driver-side effects
-  // (it is how msm_sensor_init associates subdevs), so replay it rather than assume it is inert.
-  { uint32_t sd_id = 0;
-    xioctl(c->phyfd,  VIDIOC_MSM_SENSOR_GET_SUBDEV_ID, &sd_id, "CSIPHY_GET_SUBDEV_ID");
-    sd_id = 0;
-    xioctl(c->csidfd, VIDIOC_MSM_SENSOR_GET_SUBDEV_ID, &sd_id, "CSID_GET_SUBDEV_ID"); }
+  if (csiphy_cfg(c->phyfd, i) < 0) return -1;
+  if (csid_cfg(c->csidfd, i) < 0) return -1;
 
   struct msm_vfe_smmu_attach_cmd sm; memset(&sm, 0, sizeof sm);
   sm.security_mode = 0; sm.iommu_attach_mode = IOMMU_ATTACH;
@@ -506,6 +527,8 @@ int main(int argc, char **argv) {
 
   ion_fd = open("/dev/ion", O_RDONLY);
   if (ion_fd < 0) { perror("open /dev/ion"); mcu_stop(); return 1; }
+
+  if (csi_init_all(&sd) < 0) { fprintf(stderr, "[-] CSI init sweep failed\n"); mcu_stop(); return 1; }
 
   int ispif_fd = open(sd.ispif, O_RDWR);
   if (ispif_fd < 0) { perror("open ispif"); mcu_stop(); return 1; }
