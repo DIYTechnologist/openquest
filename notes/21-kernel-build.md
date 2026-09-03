@@ -1,7 +1,9 @@
-# Instrumented kernel: BUILT, not flashed — 2026-09-03
+# Instrumented kernel: built, flashed, FAILED TO BOOT, recovered — 2026-09-03
 
-Authorised to build only. **Nothing has been flashed and the device is untouched.** This note
-records the build and lays out the flashing decision for discussion.
+> Header updated after the fact. The flash was subsequently authorised, attempted, and failed;
+> the device was fully recovered. See "FLASH ATTEMPTED AND FAILED" at the end — and note that the
+> risk assessment in the "Flashing" section below was **wrong**, which is left in place rather than
+> edited so the error is visible.
 
 Reproduce: `tools/kernel-patches/build.sh [instrument]`.
 
@@ -81,7 +83,8 @@ Meta's GPL release does not build as-shipped on a 2026 host:
 
 Artifacts: `work/kbuild/out/Image.gz-dtb.instrumented` (20 539 576 B).
 
-**The real risk is root, not bricking.**
+**The real risk is root, not bricking.** *(This turned out to be wrong — the actual outcome was
+a non-booting device. Left unedited; see the post-mortem at the end.)*
 
 - Bootloader is **unlocked** (`ro.boot.flash.locked=0`), slot `_a`, so a bad boot image is
   recoverable by flashing `backups/boot-monterey/stock_boot.img` back via fastboot.
@@ -100,3 +103,68 @@ Artifacts: `work/kbuild/out/Image.gz-dtb.instrumented` (20 539 576 B).
 3. Confirm the device can be put into fastboot reliably before we need it, not after.
 
 Nothing here is urgent — B1 still works and no other workstream is blocked on it.
+
+## FLASH ATTEMPTED AND FAILED — device recovered, 2026-09-03
+
+The instrumented kernel was flashed to `boot_a` and **did not boot**. The device was recovered to
+its exact prior state. Recording this properly because the failure mode is the useful part.
+
+### What happened
+
+1. Repacked `stock_boot.img` with our instrumented kernel (stock ramdisk, stock cmdline, stock
+   `kernel_dtb` — only the kernel binary changed), then Magisk-patched it with the device's own
+   `/data/adb/magisk/boot_patch.sh`.
+2. Verified before flashing: kernel inside the image was **md5-identical** to our build
+   (`52335e7f…`), `magiskboot cpio test` returned 1 (Magisk-patched), image backed up to the host,
+   and `fastboot devices` confirmed working.
+3. `fastboot flash boot_a` → OKAY. Reboot → **no USB enumeration at all**, in any mode.
+4. On-screen: `device unlocked → device corrupt → Meta logo → device unlocked`, cycling.
+5. Restored `new-boot_magisk30.7.img` (md5 `e534bd75…`). It did **not** come straight back — same
+   cycle persisted for several minutes.
+6. It recovered on its own shortly after. Final state verified: `boot_completed=1`, slot `_a`,
+   stock Meta kernel, Magisk 30.7 root, `trackingservice` + sensors HAL running, SELinux
+   Enforcing, and **all 4 cameras capturing** via B1.
+
+**Nothing was lost.** Only `boot_a` was ever written; `/system`, `/data`, `vbmeta` and the
+bootloader partitions (`abl`/`xbl`) were never touched.
+
+### Why it failed — not yet established
+
+Honest answer: unknown. Candidates, none confirmed:
+
+- **AVB rejection of the boot image.** The `device is corrupt` screen is AVB reporting the boot
+  image is not signed with Meta's key — but that is equally true of the Magisk image the device
+  runs happily every day, so on its own this does not explain a failure to boot.
+- **A/B slot fallback.** This is an A/B device. Bootloaders mark a slot unbootable after repeated
+  failed boots and fall back to the other slot. That would explain the most confusing observation —
+  why restoring a known-good image to `boot_a` did not immediately fix it — because the bootloader
+  may have stopped using `boot_a`. Not verified: the device recovered before slot state could be
+  read from fastboot.
+- **Kernel size / load address.** Our instrumented kernel is ~1.1 MB larger than stock
+  (`CONFIG_DYNAMIC_DEBUG` tables + `CONFIG_MSMB_CAMERA_DEBUG` strings). It fits the 64 MB partition
+  easily, but a decompressed-image or `tags_addr` constraint is not something we checked.
+
+### The methodology error
+
+I flashed a boot image that changed **two things at once**: the repack/Magisk-patch chain, and the
+kernel binary. When it failed, those could not be separated.
+
+The correct first step was to repack `stock_boot.img` with the **stock kernel** — a no-op
+round-trip through `magiskboot` + `boot_patch.sh` — and flash that. If it boots, the toolchain is
+proven and any later failure is attributable to our kernel. If it does not boot, the problem is the
+repack/AVB path and our kernel was never implicated at all.
+
+I named AVB rejection as a risk beforehand and then under-weighted it, telling the user the main
+risk was "losing root, not bricking". That framing was wrong: the actual failure was a
+non-booting device, and it cost a recovery cycle.
+
+### Where this leaves things
+
+- **B1 works; nothing is blocked.** All stock-OS workstreams are unaffected.
+- The instrumented kernel still builds reproducibly (`tools/kernel-patches/build.sh instrument`)
+  and the verified image is kept at `backups/boot-monterey/new-boot_instrumented-kernel.img`
+  (md5 `aa54d611…`) — do **not** reflash it without doing the stock-kernel round-trip test first.
+- **Next attempt, in order:** (1) stock-kernel repack round-trip to prove the chain; (2) if that
+  boots, read `slot-unbootable`/`slot-retry-count` from fastboot *before and after*; (3) only then
+  reintroduce the instrumented kernel; (4) have the device on a charger and expect to sit in
+  fastboot between attempts.
