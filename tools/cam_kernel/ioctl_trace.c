@@ -167,10 +167,26 @@ int ioctl(int fd, int op, ...) {
              (unsigned)_IOC_TYPE(req), (unsigned)_IOC_NR(req));
     nm = unk;
   }
-  static __thread char buf[2048];
+  static __thread char buf[4096];
   int n = snprintf(buf, sizeof buf, "%.9f %d %d %s %s 0x%lx %u %u %d ",
                    t0, (int)syscall(SYS_gettid), fd, path, nm, req,
                    (unsigned)_IOC_DIR(req), size, ret);
+  // ISPIF_CFG_EXT is { cfg_type, void *data, u32 size } -- the real configuration (including
+  // pack_cfg[], the CSI byte-packing setup) is entirely behind that pointer. Chase it too.
+  if (req == VIDIOC_MSM_ISPIF_CFG_EXT && arg && size >= 20) {
+    unsigned long dp; unsigned int dsz;
+    memcpy(&dp, (const unsigned char *)arg + 8, 8);
+    memcpy(&dsz, (const unsigned char *)arg + 16, 4);
+    if (dsz > 1024) dsz = 1024;
+    static unsigned char ext[1024];
+    struct iovec l = { ext, dsz }, r = { (void *)dp, dsz };
+    if (dp > 0x10000 && dsz &&
+        syscall(SYS_process_vm_readv, syscall(SYS_getpid), &l, 1UL, &r, 1UL, 0UL) > 0) {
+      n += snprintf(buf + n, sizeof buf - n, " extderef=");
+      for (unsigned i = 0; i < dsz && n < (int)sizeof buf - 4; i++)
+        n += snprintf(buf + n, sizeof buf - n, "%02x", ext[i]);
+    }
+  }
   // Dump the payload AFTER the call so _IOR/_IOWR results are captured too. Capped: a few of these
   // carry large embedded arrays and the interesting configuration is at the head.
   if (arg && size && size <= 4096) {
@@ -190,15 +206,43 @@ int ioctl(int fd, int op, ...) {
   // version query (cfgtype 0 returns csid_version 0x50000000), and treating that as an address
   // segfaults the whole capture -- which is exactly what happened. process_vm_readv returns
   // -EFAULT instead of dying, so no cfgtype table is needed and an unexpected one cannot crash us.
+  // CSID/CSIPHY config is only 16 bytes on the wire -- { u32 cfgtype, union } -- and for the
+  // *_params cfgtypes the union is a pointer, so dumping the payload alone captures a pointer value
+  // and none of the actual lane/clock/decode configuration.
+  //
+  // Follow it, but never by dereferencing directly: the same union also holds a plain u32 for the
+  // version query (cfgtype 0 returns csid_version 0x50000000), and treating that as an address
+  // segfaults the whole capture -- which is what happened on the first attempt. process_vm_readv
+  // returns -EFAULT instead of dying, so no cfgtype table is needed and an unexpected one cannot
+  // crash us.
   if ((req == VIDIOC_MSM_CSID_IO_CFG || req == VIDIOC_MSM_CSIPHY_IO_CFG) && arg && size >= 16) {
     unsigned long ptr; memcpy(&ptr, (const unsigned char *)arg + 8, 8);
-    unsigned char tmp[96];
+    unsigned char tmp[256];
     struct iovec liov = { tmp, sizeof tmp }, riov = { (void *)ptr, sizeof tmp };
-    if (ptr > 0x10000 &&
-        syscall(SYS_process_vm_readv, syscall(SYS_getpid), &liov, 1UL, &riov, 1UL, 0UL) > 0) {
+    long got = (ptr > 0x10000)
+        ? syscall(SYS_process_vm_readv, syscall(SYS_getpid), &liov, 1UL, &riov, 1UL, 0UL) : -1;
+    if (got > 0) {
       n += snprintf(buf + n, sizeof buf - n, " deref=");
       for (unsigned i = 0; i < sizeof tmp && n < (int)sizeof buf - 4; i++)
         n += snprintf(buf + n, sizeof buf - n, "%02x", tmp[i]);
+
+      // SECOND-level chase, CSID only. msm_camera_csid_params has lut_params at offset 16 with an
+      // INLINE vc_cfg_a[] at 17 and a POINTER array vc_cfg[] at 72. The vendor leaves vc_cfg_a
+      // zeroed and fills the pointers, so the per-CID cid/dt/decode_format -- which decide whether
+      // CSID accepts or silently drops every packet -- are one more indirection away and were
+      // missing from the first capture entirely.
+      if (req == VIDIOC_MSM_CSID_IO_CFG && got >= 80) {
+        unsigned char num_cid = tmp[16];
+        for (unsigned c = 0; c < num_cid && c < 4; c++) {
+          unsigned long vp; memcpy(&vp, tmp + 72 + 8 * c, 8);
+          unsigned char vc[3];
+          struct iovec l2 = { vc, sizeof vc }, r2 = { (void *)vp, sizeof vc };
+          if (vp > 0x10000 &&
+              syscall(SYS_process_vm_readv, syscall(SYS_getpid), &l2, 1UL, &r2, 1UL, 0UL) > 0)
+            n += snprintf(buf + n, sizeof buf - n, " vc_cfg[%u]=cid:%u,dt:0x%02x,dec:%u",
+                          c, vc[0], vc[1], vc[2]);
+        }
+      }
     }
   }
   n += snprintf(buf + n, sizeof buf - n, "\n");

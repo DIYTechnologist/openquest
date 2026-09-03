@@ -308,3 +308,58 @@ Next suspects, in order:
 
 Closing (2) means extending `ioctl_trace` to chase `vc_cfg[]` at capture time — cheap, and it turns
 a guess into a measurement.
+
+## B2 status: sequence complete, still no frames — ordering is the open lead
+
+Since the last update, four candidate causes were investigated. Three are **eliminated**, one is
+**fixed**, and the real difference now looks structural.
+
+**Eliminated — the CSI data type was already right.** Extended `ioctl_trace` with a second-level
+pointer chase for `lut_params.vc_cfg[]` (`msm_camera_csid_params` has an inline `vc_cfg_a[]` at
+offset 17 *and* a pointer array `vc_cfg[]` at 72; the vendor leaves the inline array zeroed and
+fills the pointers, so the values were genuinely missing from the first capture). Measured:
+`cid:0, dt:0x2a, dec:1` — exactly what `cam_kernel` was already guessing. A guess became a
+measurement and a suspect was removed, which is worth more than it sounds.
+
+**Eliminated — `ISPIF_CFG_EXT`.** The vendor's third ISPIF call is `cfg_type=11` (`ISPIF_CFG2`) via
+`VIDIOC_MSM_ISPIF_CFG_EXT`, whose `{cfg_type, void *data, u32 size}` points at a 724-byte
+`msm_ispif_param_data_ext`. Chased and decoded: the same single entry as `CFG`, `pack_cfg[]` all
+zeros, stereo disabled. Implemented; no change.
+
+**Eliminated — `AHB_CLK_CFG` and the subdev-id probes.** Both were missing (found by diffing
+`cam_kernel`'s own trace against the vendor reference — the debugging loop this tooling was built
+for). `AHB_CLK_CFG` votes `2`. Implemented; no change.
+
+**Fixed — `CSIPHY_INIT` was never sent.** Counting cfgtypes in the vendor trace: `CSIPHY_INIT` ×8,
+`CSIPHY_CFG` ×4, `CSIPHY_RELEASE` ×8 — while `cam_kernel` sent only `CSIPHY_CFG`. Payload is an
+all-zero union. Implemented; still no frames, so it was necessary-but-not-sufficient.
+
+### The open lead: bring-up ORDER differs structurally
+
+An ordered diff of the first-camera sequence shows the two flows are not the same shape:
+
+| vendor | cam_kernel |
+|---|---|
+| `DAEMON_DISABLED` | `DAEMON_DISABLED` |
+| **INIT sweep across *all* CSIPHY/CSID subdevs up front** | ISPIF `SET_VFE_INFO`, `INIT` |
+| per-camera `G_CTRL`, `CSID_CFG`, `CSIPHY_CFG` | `G_CTRL`, `CSID_INIT` |
+| `S_PARM`, `S_FMT`, `REQBUFS`, `QBUF`×4, `STREAMON` | `S_PARM`, `S_FMT`, `REQBUFS`, `QBUF`×4, `STREAMON` |
+| **`ISPIF_CFG` ×2** | `CSIPHY_INIT`, `CSIPHY_CFG`, `CSID_CFG` |
+| `AHB_CLK_CFG` | `AHB_CLK_CFG`, subdev-id probes |
+| **`CSIPHY_CFG`, `CSID_CFG` *again*, after ISPIF** | ISP block |
+| ISP block | ISPIF `CFG`, `CFG2`, `START` |
+
+Two concrete differences worth trying, in order:
+
+1. **Initialise every CSIPHY and CSID up front**, before any per-camera configuration, rather than
+   lazily per camera.
+2. **Move `ISPIF_CFG` before the ISP block, and re-send `CSIPHY_CFG`/`CSID_CFG` after it.** The
+   vendor configures the PHY/CSID *twice*, straddling the ISPIF routing setup — plausible if the
+   PHY must be programmed once the ISPIF path is established.
+
+Everything returns 0 in both flows, so ordering is exactly the kind of difference that produces
+this symptom: a correctly-configured pipeline that never receives a packet.
+
+The diff harness itself is the deliverable here — `run_ck_trace.sh` runs `cam_kernel` under
+`libioctl_trace.so`, and comparing the two traces by count *and* by position is what localised
+every one of the four items above.

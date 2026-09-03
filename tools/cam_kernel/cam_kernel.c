@@ -233,6 +233,17 @@ static int csid_version(int fd, uint32_t *ver) {
   return r;
 }
 
+// CSIPHY_INIT (cfgtype 0, all-zero union) powers and clocks the PHY. It must precede CSIPHY_CFG.
+// Missing it was the last blocker: every other call still succeeded and the kernel logged nothing,
+// but with an uninitialised PHY no CSI packets are ever received, so DQBUF simply never returns.
+// Found by counting cfgtypes in the vendor trace -- it sends CSIPHY_INIT 8 times and CSIPHY_CFG 4,
+// while cam_kernel sent CSIPHY_CFG only. (CSID_INIT we already sent, as the version query.)
+static int csiphy_init(int fd) {
+  struct csiphy_cfg_data c; memset(&c, 0, sizeof c);
+  c.cfgtype = CSIPHY_INIT;
+  return xioctl(fd, VIDIOC_MSM_CSIPHY_IO_CFG, &c, "CSIPHY_INIT");
+}
+
 static int csiphy_cfg(int fd, int i) {
   struct msm_camera_csiphy_params p; memset(&p, 0, sizeof p);
   p.lane_cnt = 1;
@@ -271,6 +282,28 @@ static int ispif_call(int fd, int cfgtype, int vfe_intf, int csid, const char *w
   c.params.entries[0].csid = (enum msm_ispif_csid)csid;
   c.params.entries[0].crop_enable = 0;
   return xioctl(fd, VIDIOC_MSM_ISPIF_CFG, &c, what);
+}
+
+// The vendor's per-camera ISPIF sequence is CFG -> CFG2 -> START_FRAME_BOUNDARY, not CFG -> START.
+// CFG2 goes through VIDIOC_MSM_ISPIF_CFG_EXT, whose payload is { cfg_type, void *data, u32 size }
+// pointing at a 724-byte msm_ispif_param_data_ext. Captured contents: the same single entry as
+// CFG, with pack_cfg[] all zeros and stereo disabled -- so it adds no new values, but the call
+// itself may still be required to arm the interface.
+static int ispif_cfg2(int fd, int vfe_intf, int csid) {
+  struct msm_ispif_param_data_ext e; memset(&e, 0, sizeof e);
+  e.num = 1;
+  e.entries[0].vfe_intf = (enum msm_ispif_vfe_intf)vfe_intf;
+  e.entries[0].intftype = RDI0;
+  e.entries[0].num_cids = 1;
+  e.entries[0].cids[0] = (enum msm_ispif_cid)0;
+  e.entries[0].csid = (enum msm_ispif_csid)csid;
+  e.entries[0].crop_enable = 0;
+  e.stereo_enable = 0;
+  struct ispif_cfg_data_ext c; memset(&c, 0, sizeof c);
+  c.cfg_type = ISPIF_CFG2;
+  c.data = &e;
+  c.size = sizeof e;
+  return xioctl(fd, VIDIOC_MSM_ISPIF_CFG_EXT, &c, "ISPIF_CFG2");
 }
 
 static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd) {
@@ -352,10 +385,26 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   int type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
   if (xioctl(c->vfd, VIDIOC_STREAMON, &type, "STREAMON") < 0) return -1;
 
+  if (csiphy_init(c->phyfd) < 0) return -1;
   if (csiphy_cfg(c->phyfd, i) < 0) return -1;
   if (csid_cfg(c->csidfd, i) < 0) return -1;
 
   // ── ISP / VFE ──
+  // AHB_CLK_CFG (vote=2) is the first ISP call the vendor makes on each VFE, before SMMU_ATTACH.
+  // It was in the traced sequence but not implemented here; a trace diff of cam_kernel against the
+  // vendor reference is what surfaced it. Sent per camera -- the vendor sends it once per VFE, and
+  // re-voting is harmless.
+  { struct msm_isp_ahb_clk_cfg ahb; memset(&ahb, 0, sizeof ahb); ahb.vote = 2;
+    xioctl(c->vfefd, VIDIOC_MSM_ISP_AHB_CLK_CFG, &ahb, "ISP_AHB_CLK_CFG"); }
+
+  // The vendor probes subdev ids on the CSIPHY and CSID before configuring them. The payload is a
+  // bare uint32_t and the returned value is unused by us -- but the call has driver-side effects
+  // (it is how msm_sensor_init associates subdevs), so replay it rather than assume it is inert.
+  { uint32_t sd_id = 0;
+    xioctl(c->phyfd,  VIDIOC_MSM_SENSOR_GET_SUBDEV_ID, &sd_id, "CSIPHY_GET_SUBDEV_ID");
+    sd_id = 0;
+    xioctl(c->csidfd, VIDIOC_MSM_SENSOR_GET_SUBDEV_ID, &sd_id, "CSID_GET_SUBDEV_ID"); }
+
   struct msm_vfe_smmu_attach_cmd sm; memset(&sm, 0, sizeof sm);
   sm.security_mode = 0; sm.iommu_attach_mode = IOMMU_ATTACH;
   xioctl(c->vfefd, VIDIOC_MSM_ISP_SMMU_ATTACH, &sm, "SMMU_ATTACH");
@@ -414,6 +463,7 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   // ── ISPIF ──
   int vfe_intf = i / 2;
   if (ispif_call(ispif_fd, ISPIF_CFG, vfe_intf, i, "ISPIF_CFG") < 0) return -1;
+  if (ispif_cfg2(ispif_fd, vfe_intf, i) < 0) return -1;
   if (ispif_call(ispif_fd, ISPIF_START_FRAME_BOUNDARY, vfe_intf, i, "ISPIF_START") < 0) return -1;
   LOGV("[+] cam%d pipeline up\n", i);
   return 0;
