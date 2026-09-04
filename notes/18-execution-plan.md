@@ -20,6 +20,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 | 3 | Controllers | both controllers visible; stream survey found 0xe0 @30 Hz (`notes/19`) | button decode agreement | 0 % |
 | 4 | `trackingservice` in place | **task 1 DONE** — pose injection works (`notes/23`) | Meta shell on our poses | pose accepted, compositor unverified |
 | 5 | OS swap | not started | boots + tracks + streams | no |
+| 6 | Display/compositor | **added 2026-09-04** — characterise stock while it exists | latency + distortion reproduced | not started |
 | X | Real-time budget | **DONE** (`notes/20`) | VIO ms/frame on-device vs 33.3 | **31.75** (tuned) |
 
 **Checkpoint 2026-09-04: `notes/24`.** Steps 0, X and **1** are done; step 4's shortcut is proven
@@ -213,6 +214,52 @@ a verified recovery path before flashing.
 
 ---
 
+## Step 6 — Display and compositor
+
+**Added 2026-09-04.** Previously implicit inside step 5 task 5 ("Monado as OpenXR runtime"), which
+hid a large workstream behind three words. `notes/16` already listed it under *unchanged risks*:
+"direct mode, lens distortion and reprojection all unbuilt".
+
+**Why it is promoted, and why part of it is due NOW rather than at step 5.**
+
+1. **Step 4 already depends on it.** Step 4's criterion is motion-to-photon latency "within 2× of
+   stock", which cannot be evaluated without characterising the stock compositor.
+2. **The reference is perishable.** `notes/23` proved we can drive Meta's compositor with a known
+   pose, which turns it into a *measurable* reference: inject a step change, observe when photons
+   change. After the swap deletes `/vendor`, that reference is gone. This is the same logic that
+   motivates the whole incremental strategy — build against the known-good while it still runs.
+
+**What exists already:** per-panel display calibration, screen offsets and uniformity are exported
+(`notes/05`). Panel is `qcom,mdss_dsi_sdc_lightman`, **2880x1600 @ 72 Hz**. The composer HAL blob
+(`vendor.oculus.hardware.graphics.composer@1.1-impl-monterey.so`) is thin — 24 exports; the real
+compositing lives in `vrapiserver`/`libvrapi.so`.
+
+**Tasks (A = do now on the stock OS, B = after the swap)**
+
+1. **(A)** Measure stock **motion-to-photon latency** using injection as the stimulus — a known pose
+   step at a known time, against photon change. Serves step 4's criterion directly.
+2. **(A)** Characterise panel timing: refresh, persistence/low-persistence strobing, vsync
+   behaviour, whether the stock path is direct-mode/front-buffer.
+3. **(A)** Validate we can **reproduce Meta's lens distortion** from `notes/05` calibration —
+   offline is sufficient (render a grid, compare against what the stock compositor produces).
+4. **(B)** Bring up the DSI panel under DRM/KMS on the new OS.
+5. **(B)** Monado compositor: distortion mesh from our calibration, reprojection/timewarp, direct
+   mode.
+
+**Acceptance criteria**
+- [ ] Stock motion-to-photon latency **measured**, with the method stated (this is the number step 4
+      is scored against, so it is a deliverable in itself)
+- [ ] Panel timing documented: refresh, persistence, vsync, direct-mode or not
+- [ ] Our distortion correction reproduces Meta's to a **stated pixel error** on a test pattern
+- [ ] (B) Monado renders through the panel at 72 Hz with reprojection
+
+**Kill criteria.** If the panel cannot be driven without a Meta display blob, the OS swap keeps a
+closed component — record it explicitly against the "0 Meta blobs" goal rather than quietly.
+
+**Needs headset:** tasks 1–3 are device-runs plus one worn session for latency perception; ⚠ partial.
+
+---
+
 ## Step X — Real-time budget (cross-cutting, do early)
 
 **Objective.** Retire the largest unexamined project risk: nothing has ever run on the Quest's own
@@ -248,7 +295,8 @@ The plan is **not** a chain. Only two real dependency edges exist; the rest is p
 | **3** Controllers | *nothing* — syncboss stream is already ours | 5 (partially) | Button/IMU decode needs no cameras |
 | **X** Real-time | *nothing* — runs the existing `vio-table2` dataset | **4** | Cheap, and can invalidate 4 |
 | **4** `trackingservice` | **X**, plus *a* camera path (B1 is fine) | 5 | Does not need B2 |
-| **5** OS swap | **1**, **3**, **4**'s core | — | Needs kernel-based camera; `/vendor` is gone |
+| **5** OS swap | **1**, **3**, **4**'s core, **6B** | — | Needs kernel-based camera; `/vendor` is gone |
+| **6** Display/compositor | 6A: *nothing* (needs stock alive) | 4's latency criterion, 5 | **6A is perishable — the reference dies with the swap** |
 
 ```
         ┌── 1 (B2 camera) ─────────────────────────┐
