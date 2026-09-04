@@ -83,12 +83,42 @@ the framing legible: after the 8-byte id and a 14-byte header, records are
 
 `0xd9` (1 Hz, 33 B) embeds the same device id and looks like a periodic status/announce.
 
-**Which tag is which control is not yet pinned down.** A button-press capture produced clear
-sustained states in `0x24` and `0x25`, but the press order was ambiguous, and a follow-up capture
-isolating the trigger recorded no input because the capture window and the instructions did not line
-up. The remaining work is procedural, not analytical: capture with a **handshake** (wait for "ready"
-before starting), one control at a time, with a slow full-range squeeze to separate analogue from
-digital.
+### `0x63` = two 12-bit analogue axes — trigger CONFIRMED
+
+The 3-byte record packs **two 12-bit values, little-endian** (`v & 0xFFF`, `(v >> 12) & 0xFFF`), and
+the scale is **inverted: 4095 = released, 0 = fully pressed**.
+
+Confirmed against a controlled capture — a slow full-range squeeze, then three sharp presses one
+second apart:
+
+```
+press events (axis A below 50%):
+    0.0s ->   3.2s   (3178 ms)     <- initial squeeze and slow release
+   24.1s ->  24.4s   ( 300 ms)  \
+   24.9s ->  25.2s   ( 300 ms)   >  the three sharp presses, 0.8 s apart
+   25.9s ->  26.2s   ( 317 ms)  /
+
+24.07s   207     24.15s     0     24.39s  4095      <- full press and release in ~300 ms
+```
+
+172 distinct values on axis A over the full 0–4095 range: genuinely analogue, not a bit. **Axis A is
+the trigger.** Axis B moved independently during a different part of the capture and is *probably*
+the grip — plausible but **not confirmed**, since that press was not isolated.
+
+### Remaining
+
+| tag | status |
+|---|---|
+| `0x41` | **confirmed** — IMU, 501 Hz, accel milli-g |
+| `0x63` A | **confirmed** — trigger, 12-bit, inverted |
+| `0x63` B | probable grip — not isolated |
+| `0x24` | digital buttons: `0x10` idle, `0x11`/`0x12` held. Which physical buttons is unknown |
+| `0x25` | bitmask, values `0x80`/`0x88` — capacitive touch is the likely reading, unconfirmed |
+| `0x87` | 2x int16, thumbstick-shaped — unconfirmed |
+| `0x82`, `0x26` | constant throughout; unidentified |
+
+Each remaining one needs the same treatment: **one control, isolated, with a handshake so the
+capture window lines up with the action.** The method now works; it is repetition, not research.
 
 ## What this does and does not settle
 
