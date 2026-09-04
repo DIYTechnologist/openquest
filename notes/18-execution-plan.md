@@ -17,7 +17,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 | 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
 | 1 | Direct-kernel camera (B2) | **DONE** — 5/5 (`notes/22`), final ‖p‖ 0.203 m | Meta libs needed by capture | **0** |
 | 2 | Ground truth vs Meta | schema confirmed; logger blocked on shared-mem path (CLI is 3.3 Hz) | ATE RMSE vs Meta poses | unknown |
-| 3 | Controllers | both controllers visible; stream survey found 0xe0 @30 Hz (`notes/19`) | button decode agreement | 0 % |
+| 3 | Controllers | **stream found**: enable=213, data=0x8f, IMU decoded @501 Hz (`notes/27`) | button decode agreement | 0 % (needs presses) |
 | 4 | `trackingservice` in place | **task 1 DONE** — pose injection works (`notes/23`) | Meta shell on our poses | pose accepted, compositor unverified |
 | 5 | OS swap | not started | boots + tracks + streams | no |
 | 6 | Display/compositor | **added 2026-09-04** — characterise stock while it exists | latency + distortion reproduced | not started |

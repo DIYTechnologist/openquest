@@ -71,6 +71,16 @@ static void note(unsigned char type, const unsigned char *pl, int len, double t)
   if (s->n_len < 8) s->len_seen[s->n_len++] = (unsigned char)len;
 }
 
+// Usage: sb_survey [seconds] [raw_out] [enable_type ...]
+//
+// Extra enable types are sent as bare {type, seq, len=0} after the camera probe. The MCU gates each
+// data stream behind its own enable -- a camera probe alone yields no IMU at all -- so discovering a
+// stream means discovering its enable. Types are recovered from libsyncboss.so by disassembly:
+// the request/response helper is called with the type in w1, which reproduces the documented
+// imu_enable = 110 / response 125 exactly, and gives camera_probe = 40 and camera_release = 41
+// matching the published driver. On that basis:
+//     110 syncboss_imu_enable      116 syncboss_mag_enable
+//     213 syncboss_input_start     209 syncboss_input_unpair
 int main(int argc, char **argv) {
   double secs = argc > 1 ? atof(argv[1]) : 20.0;
   const char *rawpath = argc > 2 ? argv[2] : "/data/local/tmp/sb_raw.bin";
@@ -85,6 +95,13 @@ int main(int argc, char **argv) {
   unsigned char none = 0;
   sb_send("camera_probe(session on)", 0x28, 0, &none, 0);
   usleep(200000);
+  for (int a = 3; a < argc; a++) {
+    int t = atoi(argv[a]);
+    char label[48];
+    snprintf(label, sizeof label, "enable type %d", t);
+    sb_send(label, (unsigned char)t, sb_seq++, &none, 0);
+    usleep(200000);
+  }
 
   FILE *raw = fopen(rawpath, "wb");
   unsigned char buf[65536];
