@@ -164,3 +164,47 @@ rather than breakage. This is the most likely cause if the rendered result feels
 A pose in `dumpsys`/`getHeadTrackingData` is **not** proof the compositor renders from it. The
 step-4 criterion — *Meta's shell responds to head motion for ≥ 10 minutes* — needs someone looking
 through the headset while injection runs. That is the next real test, and it needs the wearer.
+
+---
+
+# Confirmed: the compositor renders from the injected pose — 2026-09-04
+
+The caveat carried through this whole note — *"a pose in `dumpsys` is not proof the compositor
+renders from it"* — is now resolved. **It does.**
+
+**Test.** Headset worn (so the proximity sensor is genuinely covered and tracking is 6DOF).
+10 s baseline with no injection to establish that the view follows the head normally, then 25 s of
+`spin.txt`: a continuous 360° yaw at 14.4°/s, injected at 30 Hz. Continuous and non-reversing by
+design, so "did the world move or did I move?" has no ambiguous answer.
+
+**Result.** The wearer reported the world drifting steadily sideways for the duration. 750 poses,
+30.0 Hz, 0 failed, 0 missed deadlines, no exceptions.
+
+Two earlier attempts were inconclusive because of test design, not the mechanism: ±15° at 0.1 Hz was
+too subtle to distinguish from ordinary head motion, and instructions cannot be read while the
+headset is on. Fixed by briefing before donning, adding a no-injection baseline, and using a
+continuous one-directional motion.
+
+**What this closes.** Step 4's first acceptance criterion (`dumpsys tracking` reporting our poses at
+6DOF, `Valid: Yes`) is met, and the load-bearing assumption behind it is verified rather than
+assumed. Meta's compositor is a usable consumer of an external pose source.
+
+## The next obstacle is device contention, not the interface
+
+Everything so far replays a **recorded** trajectory. Closing the loop live — camera → VIO →
+injection in real time — runs into a conflict already flagged in `notes/18` step 2:
+
+- `cam_kernel` needs `trackingservice` **stopped** (`/dev/video0` and `/dev/syncboss0` are
+  single-open, and `trackingservice` holds them).
+- Injection needs `trackingservice` **running** — it is the service being injected into.
+
+So on the stock OS, our camera stack and our injection target cannot run simultaneously by that
+route. This does not affect the OS swap (step 5), where we own the whole stack and nothing competes;
+it affects only the in-place demo. Options, unverified:
+
+1. Revive the **leech** (`notes/09`/`notes/10`) to read frames while `trackingservice` runs — the
+   same tool step 2 needs for ground truth, so it serves twice.
+2. Establish exactly which nodes actually conflict, rather than assuming all of them do.
+
+Recorded as the next thing to determine. It does **not** invalidate what is proven here: the
+injection path works, at frame rate, with our own poses, and reaches the display.
