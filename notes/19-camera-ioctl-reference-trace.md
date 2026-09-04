@@ -766,3 +766,87 @@ echo 0 > /sys/devices/soc/1da4000.ufshc/hibern8_on_idle_enable
 Whether the instrumented kernel makes this more likely is **untested** — our config is byte-identical
 to stock except `CONFIG_SYSTEM_TRUSTED_KEYS`, but the toolchain differs and the hibern8 handshake is
 timing-sensitive. Falsifiable test: flash stock boot, leave idle, see if it recurs.
+
+## Session 7 — SyncBoss MCU protocol, from the published driver — 2026-09-04
+
+`drivers/staging/oculus/mcu/syncboss/` names the message types we had only as bare numbers. All of
+this is GPL source in `work/oculus-kernel/`, not RE:
+
+| type | name | direction |
+|---|---|---|
+| 2 / 3 | `GET_DATA` / `SET_DATA` | host → MCU (wrapper for sub-typed payloads) |
+| 40 / 41 (0x28/0x29) | `CAMERA_PROBE` / `CAMERA_RELEASE` | host → MCU (gates camera power) |
+| 90 | `SHUTDOWN` | host → MCU |
+| 203 / 204 | `PROX_ENABLE` / `PROX_DISABLE` | host → MCU |
+| 205 | `SET_PROX_CAL` | host → MCU |
+| 207 | `PROXSTATE` | **MCU → host** (drives the mount state) |
+| 212 | `SET_PROX_CONFIG_VERSION` | host → MCU |
+| 244 | `WAKEUP_REASON` | **MCU → host** |
+
+Wire format (`syncboss_protocol.h`), which matches the `01 03 00 <type> 00 <len>` framing already
+in `sb_decode.py`:
+```c
+struct syncboss_data    { u8 type; u8 sequence_id; u8 data_len; u8 data[]; };
+struct prox_config_data { u8 type; u16 thdh; u16 thdl; u16 canc; } __packed;
+```
+
+### Stream survey (`tools/sb_survey/`)
+
+`cat /dev/syncboss_stream0` returns **0 bytes** — the MCU emits nothing until a session is open.
+`sb_survey` opens the gate itself (type 0x28) then catalogues every type seen. With a
+camera-probe-only session and both controllers powered and paired:
+
+```
+type   count  rate(Hz)  len   first payload
+0x46       1       0.0   1    0f
+0xe0     607      30.3  14    00f1820000000000000100000001
+```
+
+**0xe0 @ 30 Hz / 14 bytes is new** — not in `sb_decode.py`, which only knows 0x50 (IMU) and 0x51
+(camera exposure). Note **no 0x50 at all**: IMU streaming needs its own enable, so a camera probe
+alone does not turn on the sensor streams. Identifying 0xe0 and finding the controller enable are
+the open items for step 3.
+
+### Proximity / mount state — why the physical cover is currently required
+
+`sys.hmt.mounted` is an **output, not an input**: `setprop` sticks as a property but does not
+restore 6DOF, because `trackingservice` gates on the MCU's `PROXSTATE` (207) message, which
+`signal_powerstate_event()` raises. Measured: covered → `6DOF Valid:Yes`; uncovered → `3DOF` then
+`0DOF Valid:No`, and `getHeadTrackingData` returns `{}`.
+
+The thresholds come from `read_cal_int()` → `request_firmware("PROX_PS_THDH")` etc.
+`/vendor/firmware/PROX_PS_*` are **symlinks into `/persist`**:
+```
+PROX_PS_THDH = 40   PROX_PS_THDL = 28   PROX_PS_CANC = 29   PROX_PS_CAL_VERSION = 1
+```
+Lowering THDH/THDL would make the sensor always read "worn" and remove the cover dependency. **Not
+done.** Two reasons: the runtime route (type 205 to `/dev/syncboss0`) is unusable because that node
+is single-open and `trackingservice` holds it — injecting cal means stopping the service whose
+poses we want; and the file route writes to `/persist`, which holds every factory serial and
+calibration on the device (camera/display/lens serials, IPD limits, controller UUIDs, wlan MAC) for
+a saving of one piece of tape. Poor risk/reward; recorded as a known lever, not taken.
+
+Backed up regardless: `backups/persist-prox/` (the five prox files) and
+`backups/persist-backup.tar` (all 139 entries, 14 MB).
+
+### Pose logging rate
+
+`trackinginterface_cli` measures **3.3 Hz** (~300 ms/call, process spawn + Binder setup), against a
+≥ 30 Hz criterion — usable for schema discovery only. It imports **zero** symbols from
+`libossdk.oculus.so`; the tracking client is statically linked, so there is no library API to
+borrow. The real logger must go through `ITrackingService::getSharedMemoryFileDescriptor` or read a
+client's existing mapping (`/dev/ashmem/TrackingServiceController`, 16 KB, seen in
+`com.oculus.vrguardianservice`).
+
+### Step 4 shortcut confirmed to exist
+
+`libossdk.oculus.so` exports, and `service list` shows registered as `TrackingDataInjection`:
+```
+BpTrackingDataInjectionService::updateHeadsetPoseField(int, vector<float> const&, bool*)
+BpTrackingDataInjectionService::updateRemotePoseField(String16 const&, int, vector<float> const&, bool*)
+BpTrackingDataInjectionService::updateRemoteButtons(String16 const&, vector<ButtonState> const&, bool*)
+BpTrackingDataInjectionService::moveRemoteThumbstick(String16 const&, int, int, bool*)
+BpTrackingDataInjectionService::setTrackingMode(int, bool*)
+```
+`updateHeadsetPoseField` is exactly what step 4 task 1 hoped for — external pose injection with no
+RE of the producer side. Not yet probed.
