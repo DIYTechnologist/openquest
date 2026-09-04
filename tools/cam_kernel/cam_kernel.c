@@ -658,11 +658,33 @@ int main(int argc, char **argv) {
   printf("[%c] %d/%d camera pipelines up\n", up == ncam ? '+' : '-', up, ncam);
   if (!up) { mcu_stop(); return 1; }
 
+  // Acceptance criterion (notes/18 step 1): prove no Meta userspace library is MAPPED, not merely
+  // unused. Checked here, with the whole pipeline live, because a lazily-dlopened blob would only
+  // show up once streaming is configured.
+  {
+    FILE *m = fopen("/proc/self/maps", "r");
+    int hits = 0; char ln[512];
+    if (m) {
+      while (fgets(ln, sizeof ln, m)) {
+        if (strcasestr(ln, "oculus") || strcasestr(ln, "syncboss") || strcasestr(ln, "qcamera")) {
+          hits++;
+          fprintf(stderr, "[-] Meta lib mapped: %s", ln);
+        }
+      }
+      fclose(m);
+    }
+    printf("[%c] Meta libs mapped during capture: %d (criterion: 0)\n", hits ? '-' : '+', hits);
+  }
+
   // FSIN strobe LAST: the MCU must strobe into a receiver that is already listening (notes/13).
   mcu_start(ncam);
   usleep(400000);
 
   mkdir("/data/local/tmp/camkernel", 0755);
+  // Every frame's kernel timestamp, for offline FSIN-pairing and delivery-rate analysis. Buffered
+  // and closed after the loop so logging never perturbs the timing it is measuring.
+  FILE *tsf = fopen("/data/local/tmp/camkernel/ts.csv", "w");
+  if (tsf) fprintf(tsf, "cam,seq,buf_index,sec,usec,roi_mean\n");
   int got[MAXCAM] = {0};
   double t_end = now_s() + secs;
   while (now_s() < t_end) {
@@ -674,7 +696,7 @@ int main(int argc, char **argv) {
       vb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE; vb.memory = V4L2_MEMORY_USERPTR;
       vb.m.planes = dpl; vb.length = 1;
       if (ioctl(cams[i].vfd, VIDIOC_DQBUF, &vb) < 0) continue;
-      if (got[i] < 3 && vb.index < NBUF) {
+      if (got[i] < 12 && vb.index < NBUF) {
         const unsigned char *px = cams[i].buf[vb.index].va;
         unsigned long sum = 0;
         for (int k = 0; k < FRAME_SZ; k++) sum += px[k];
@@ -686,6 +708,15 @@ int main(int argc, char **argv) {
                (long)vb.timestamp.tv_sec, (long)vb.timestamp.tv_usec,
                (double)sum / FRAME_SZ, path);
       }
+      // Mean of a 64-px stripe. The MCU alternates exposure every frame (frame_tag_mode), so this
+      // swings ~48 vs ~5 and gives a DATA-level sync check: FSIN-locked groups must stay in the
+      // same exposure phase. V4L2 timestamps cannot show this -- both cameras on a VFE share one
+      // IRQ timestamp, so inter-group timestamp spread is IRQ latency, not sensor sync.
+      unsigned rs = 0;
+      { const unsigned char *rp = cams[i].buf[vb.index].va;
+        if (rp) for (int k = 0; k < 64; k++) rs += rp[(FRAME_SZ / 2) + k]; }
+      if (tsf) fprintf(tsf, "%d,%d,%u,%ld,%ld,%.2f\n", i, got[i], vb.index,
+                       (long)vb.timestamp.tv_sec, (long)vb.timestamp.tv_usec, rs / 64.0);
       got[i]++;
       dpl[0].m.userptr = (unsigned long)cams[i].buf[vb.index].fd;   // dmabuf fd, see QBUF note
       dpl[0].length = (unsigned int)cams[i].buf[vb.index].len;
@@ -694,6 +725,7 @@ int main(int argc, char **argv) {
     }
     usleep(2000);
   }
+  if (tsf) fclose(tsf);
   // Decisive diagnostic: read the ION buffers DIRECTLY, regardless of DQBUF. This separates
   // "hardware never captured anything" from "hardware captured fine but the buffer-done handoff
   // back to userspace is broken" -- two completely different bugs that look identical from DQBUF.

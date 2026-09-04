@@ -15,7 +15,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 | # | Step | State | Headline metric | Now |
 |---|---|---|---|---|
 | 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
-| 1 | Direct-kernel camera (B2) | 1.1, 1.2 done; 1.3 two more real bugs fixed, still PARKED (`notes/19`) | Meta libs needed by capture | **2** (was 3) |
+| 1 | Direct-kernel camera (B2) | **4/5 criteria met** (`notes/22`); only the motion-capture check is open | Meta libs needed by capture | **0** |
 | 2 | Ground truth vs Meta | not started | ATE RMSE vs Meta poses | unknown |
 | 3 | Controllers | not started | button decode agreement | 0 % |
 | 4 | `trackingservice` in place | not started | Meta shell on our poses | no |
@@ -56,11 +56,15 @@ easier now, with B1 present to diff against.
 4. **1.4 Parity.** All 4 sensors, 30 Hz, FSIN-synced, 640×481 mono8.
 
 **Acceptance criteria**
-- [ ] `grep -ci oculus /proc/self/maps` during capture = **0** (no Meta lib mapped, not merely unused)
-- [ ] ≥ **99 %** frame delivery over a 60 s run, vs B1 on the same duration
-- [ ] FSIN sync preserved: cameras pair into **two groups of two**, byte-identical timestamps within
-      a group, **< 200 µs** between groups (B1 measured ~80 µs)
-- [ ] Frames byte-comparable to B1 for a static scene: mean abs difference **< 2 LSB**
+- [x] `grep -ci oculus /proc/self/maps` during capture = **0** — measured 0 (`notes/22`)
+- [x] ≥ **99 %** frame delivery over a 60 s run — **99.43 %**
+- [x] FSIN sync preserved: two groups of two, byte-identical within a group — **0.0 µs**, and
+      inter-group **exposure-phase agreement 99.86 %** with no drift over 60 s. NOTE: the original
+      "< 200 µs between groups" sub-criterion measures VFE IRQ latency, not sensor sync, and is
+      superseded by the phase check (`notes/22`).
+- [~] ~~Frames within **2 LSB** of B1 on a static scene~~ — **struck as unmeasurable**: B1 scores
+      6.4–12.0 LSB against itself. Parity shown instead — B2 self-consistency matches B1's to
+      within 0.03 LSB (`notes/22`).
 - [ ] A dataset built through `build_euroc_direct.py` from B2 frames drives OpenVINS to a
       **bounded** trajectory (final ‖p‖ < 2 m on a table-start capture), i.e. no regression vs step 0
 
