@@ -59,3 +59,52 @@ symptoms. Both fixed; the search then found the region on the first attempt.
 a defect in the tool — `dumpsys | grep -m1` killing `trackingservice`, and both of these. A negative
 result from an instrument that has never produced a positive is not evidence. The fix is cheap:
 before trusting "not found", confirm the tool can find something known to be there.
+
+---
+
+# `tools/pose_log/` — logger built and acceptance criterion met
+
+Reads the region out of `trackingservice` via `/proc/<pid>/mem`, resolving the address by **name**
+from `/proc/<pid>/maps` each run (it is not stable across restarts). A read-only `pread` was chosen
+over mapping the ashmem fd through `ITrackingService::getSharedMemoryFileDescriptor`: for a
+measurement tool it is simpler and cannot perturb the producer.
+
+Per sample: read `seq`, compute `slot = seq % nslots`, read that slot's quaternion and position.
+
+## Validation against a known signal
+
+Rather than trust it on live data, it was checked against an **injected circle of radius 0.5** —
+a signal whose correct answer is known exactly:
+
+```
+100 Hz sampling, 12 s:   radius mean = 0.5000  min = 0.5000  max = 0.5000, 0 read errors
+```
+
+Exact to four decimals at every sample, so the slot selection is not tearing.
+
+## Acceptance criterion (notes/18 step 2)
+
+*"Meta poses logged at >= 30 Hz for >= 120 s with < 1 % dropped samples"*:
+
+| metric | result |
+|---|---|
+| duration | **125.0 s** |
+| rate | **59.97 Hz** |
+| interval | median 16.67 ms, p99 17.25 ms, max 98.95 ms |
+| late (> 1.5x period) | **5 / 7494 = 0.067 %** |
+| read errors | **0** |
+| radius over the whole run | 0.5000 / 0.5000 / 0.5000 |
+
+**Criterion met**, with ~2x the required rate.
+
+One caveat on interpretation: the *distinct pose* rate here is 34 Hz, but that is bounded by the
+**source** — the injection driving this test publishes at 30 Hz — not by the logger, which sampled
+at 60 Hz without error. Against live tracking the distinct rate will be whatever Meta produces.
+
+## What step 2 still needs
+
+The logger is done; the ground-truth *comparison* is not. It needs a worn capture with our sensors
+recorded in the **same session** as Meta's poses, then time alignment and ATE/RPE. Note the two are
+not trivially simultaneous: our camera stack needs the sensors HAL stopped, and Meta's tracker needs
+it running. `notes/23` showed the contention is with the HAL rather than `trackingservice`, so this
+needs checking — Meta's poses may keep flowing from IMU alone with the HAL down, or may not.
