@@ -10,7 +10,7 @@ B1 = `tools/cam_direct/` under `SYNCBOSS_RAW=1`, the reference that works.
 | 3 | Two groups of two, identical timestamps within a group | cam0≡cam1, cam2≡cam3, **0.0 µs** over 3600 frames | ✅ |
 | 3b | < 200 µs between groups | median **91 µs**; p99 1172 µs — see below | ⚠️ superseded |
 | 4 | Frames within **2 LSB** of B1, static scene | **3.3–4.9 LSB**; criterion is below the noise floor — see below | ⚠️ not as written |
-| 5 | B2 dataset → OpenVINS bounded trajectory | **not yet run** — needs a motion capture | ⬜ |
+| 5 | B2 dataset → OpenVINS bounded trajectory | **final ‖p‖ = 0.203 m** (criterion < 2 m) | ✅ |
 
 ## Criterion 3b measures the wrong thing
 
@@ -54,11 +54,41 @@ cross-tool agreement (3.3–4.9) is no worse than either tool's own frame-to-fra
 pipelines are statistically indistinguishable. Recorded as parity-demonstrated; the 2 LSB threshold
 should be struck from `notes/18` as unmeasurable rather than carried as a failing item.
 
-## Remaining
+## Criterion 5 — closed 2026-09-04
 
-Criterion 5 needs a capture **with motion** — a static desk capture cannot exercise a VIO
-trajectory. Smallest sufficient version: ~30 s of the headset being picked up and moved in a figure
-of eight, then set back down. Does not require the headset to be worn.
+75 s handheld capture (`cam_kernel 4 75 3000 160 02`): headset picked up off the desk, moved in a
+figure of eight, set back down. All four cameras streamed; cam0/cam2 persisted.
+
+```
+2245 / 2247 SLAM frames (cam0/cam2), 74388 IMU samples @ 998.8 Hz, 2256 exposure stamps
+stereo pairs within 4 ms: 2245   ->   2237 pairs written after clock snapping
+```
+
+OpenVINS on the converged baseline config (`num_pts` 200, `max_slam` 50, stereo,
+`init_imu_thresh` 0.3), regenerated for the 0/2 pair:
+
+| metric | value |
+|---|---|
+| poses | 621 @ 30.0 Hz |
+| **final ‖p‖** | **0.203 m** (criterion **< 2 m**) |
+| path length | 7.24 m |
+| max excursion from start | 0.62 m |
+| max speed | 0.63 m/s (median 0.38) |
+
+The estimator initialised **53.9 s into the capture** and tracked the final 21.1 s. Not a fault:
+`init_imu_thresh` gates initialisation on IMU excitation and the headset genuinely sat still for the
+first ~54 s, so the tracked window is exactly the motion.
+
+**No regression against step 0** (`notes/14`: 0.56 m final on a 23 s capture; this is 0.203 m on
+21 s) — and that baseline was built from **B1**, i.e. through Meta's blobs. On this evidence the
+open pipeline is at least as good.
+
+Artifacts: `exports/vio-b2-2026-09-04/`.
+
+## Step 1 is complete
+
+All five criteria met, two restated to be measurable (3b and 4 above). The camera path now runs end
+to end — sensor to 6DoF trajectory — with **zero Meta userspace blobs**.
 
 ## Method note
 

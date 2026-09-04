@@ -15,7 +15,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 | # | Step | State | Headline metric | Now |
 |---|---|---|---|---|
 | 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
-| 1 | Direct-kernel camera (B2) | **4/5 criteria met** (`notes/22`); only the motion-capture check is open | Meta libs needed by capture | **0** |
+| 1 | Direct-kernel camera (B2) | **DONE** — 5/5 (`notes/22`), final ‖p‖ 0.203 m | Meta libs needed by capture | **0** |
 | 2 | Ground truth vs Meta | schema confirmed; logger blocked on shared-mem path (CLI is 3.3 Hz) | ATE RMSE vs Meta poses | unknown |
 | 3 | Controllers | both controllers visible; stream survey found 0xe0 @30 Hz (`notes/19`) | button decode agreement | 0 % |
 | 4 | `trackingservice` in place | **task 1 DONE** — pose injection works (`notes/23`) | Meta shell on our poses | pose accepted, compositor unverified |
@@ -65,8 +65,8 @@ easier now, with B1 present to diff against.
 - [~] ~~Frames within **2 LSB** of B1 on a static scene~~ — **struck as unmeasurable**: B1 scores
       6.4–12.0 LSB against itself. Parity shown instead — B2 self-consistency matches B1's to
       within 0.03 LSB (`notes/22`).
-- [ ] A dataset built through `build_euroc_direct.py` from B2 frames drives OpenVINS to a
-      **bounded** trajectory (final ‖p‖ < 2 m on a table-start capture), i.e. no regression vs step 0
+- [x] A dataset built through `build_euroc_direct.py` from B2 frames drives OpenVINS to a
+      **bounded** trajectory — **final ‖p‖ 0.203 m**, path 7.24 m, 621 poses @ 30 Hz (`notes/22`)
 
 **Kill criteria.** An ioctl or config path is required that is *not* in the published tree, or the
 ISP requires an opaque firmware/config blob we cannot construct. If hit: fall back to B1 for the
