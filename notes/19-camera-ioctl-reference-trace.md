@@ -850,3 +850,29 @@ BpTrackingDataInjectionService::setTrackingMode(int, bool*)
 ```
 `updateHeadsetPoseField` is exactly what step 4 task 1 hoped for — external pose injection with no
 RE of the producer side. Not yet probed.
+
+## Display blanking and the covered precheck — 2026-09-04
+
+The Quest 1 panels are **OLED**, so leaving the proximity sensor covered (which the headset reads as
+"worn") keeps a static VR shell on screen and accumulates burn-in. Two findings:
+
+- **Blanking works and is reversible**: `echo 4 > /sys/class/graphics/fb0/blank`
+  (`FB_BLANK_POWERDOWN`), restored with `echo 0`. Verified tracking returns to 6DOF after unblank.
+- **Blanking stops head tracking.** Measured: 6DOF → `0DOF Valid:No` while blanked, even though
+  `sys.hmt.mounted` stays 1. So the panel must be **on** for anything needing poses, and should be
+  **off** for everything else. Camera capture needs no panel.
+- **Brightness is not a workaround.** `screen_brightness` (255) and `screen_brightness_for_vr` (86)
+  are both settable via `settings put` but the VR runtime **rejects the change** — they read back
+  unmodified. Blanking is the only lever that works.
+
+`tools/device/devctl.sh` holds the shared helpers (`display_off`/`display_on`, `ufs_pin`,
+`require_covered`); capture scripts source it.
+
+**`require_covered` must run BEFORE services are stopped** — `sys.hmt.mounted` is driven by the
+MCU's `PROXSTATE` message and nothing updates it once `trackingservice` is down, so a check placed
+after the `stop` reads a stale value.
+
+Default idle state is now **panel off**. Turn it back on with:
+```sh
+adb shell su -c 'echo 0 > /sys/class/graphics/fb0/blank'
+```
