@@ -83,3 +83,84 @@ already demonstrated in miniature. Remaining work is no longer *"can we?"* but e
 
 **Caveat worth keeping honest:** this proves the *interface* accepts and republishes a pose. It does
 not yet prove the compositor renders from that pose, which is the criterion that actually matters.
+
+---
+
+# Injection daemon — frame rate achieved, real VIO replayed — 2026-09-04
+
+`tools/pose_inject/` drives the interface from one process instead of one-shot `service call`.
+
+**Why a daemon was needed:** `service call` costs ~21 ms per invocation (process spawn), and a pose
+needs **two** transactions — position and orientation are separate fields — so it tops out near
+23 Hz, under frame rate.
+
+## How it binds, without any Meta library
+
+Uses the **stable NDK binder C API** (`libbinder_ndk`, Android 10+), not `libbinder`'s C++ ABI, so
+nothing depends on a Meta blob or on matching a C++ ABI we do not control:
+
+```
+AServiceManager_getService("TrackingDataInjection")
+AIBinder_Class_define("oculus.internal.virtual_input.ITrackingDataInjectionService", ...)
+AIBinder_associateClass()          // so prepareTransaction writes the right interface token
+AIBinder_prepareTransaction() -> AParcel_writeInt32(field) -> AParcel_writeFloatArray(v, n)
+AIBinder_transact(binder, 2, ...)
+```
+
+One wrinkle: `AServiceManager_getService` lives in `<android/binder_manager.h>`, which the NDK does
+not ship, **and the NDK's stub `libbinder_ndk` does not export it either** — so it cannot be linked
+and is resolved with `dlopen`/`dlsym` against the device library. Everything else links normally.
+
+## Measured
+
+| target | achieved | failed | missed deadline | worst overrun |
+|---|---|---|---|---|
+| 30 Hz | 30.0 Hz | 0 | **0 (0.0 %)** | 0.0 ms |
+| 60 Hz | 59.9 Hz | 0 | 1 (0.3 %) | 12.9 ms |
+| 120 Hz | 119.5 Hz | 0 | 5 (0.7 %) | 9.0 ms |
+| 240 Hz | 237.3 Hz | 0 | 21 (1.5 %) | 18.0 ms |
+
+**8× headroom over frame rate, at 6.4 % of one core** — it coexists with VIO's 31.75 ms/frame.
+
+## Correctness
+
+Synthetic circle (r = 0.5, yaw-coupled) read back through `getHeadTrackingData`: radius **exactly
+0.500** on every sample, `y` exactly 0.000, `valid: true` throughout.
+
+Then the real thing — **our own VIO trajectory** from the open camera stack (`notes/22`), 621 poses
+replayed at 30 Hz:
+
+```
+our VIO final : -0.026141581  0.092579816  0.040967583 | 0.543203203 -0.413153257 -0.459988539 0.568018671
+Meta reports  : -0.026141580 +0.092579819 +0.040967584 | +0.543203175 -0.413153261 -0.459988534 +0.568018675
+621 poses @ 30.0 Hz, 0 failed, 0 missed deadlines
+```
+
+Agreement to ~1e-8 — float32 round-trip precision. **The full chain runs: open cameras → open VIO →
+Meta's tracker**, with no Meta userspace code anywhere in it.
+
+## Field map closed out
+
+Fields **4 and 5 are rejected** (return `false`), so the valid range is **0–3**:
+
+| field | arity | status |
+|---|---|---|
+| 0 | 3 | position — works, verified to float precision |
+| 1 | 4 | orientation quat (xyzw) — works, verified |
+| 2 | 3 | accepted (`true`) but **never observable** |
+| 3 | 3 | accepted (`true`) but **never observable** |
+
+Fields 2/3 were injected with `{7,8,9}` and checked against `pos_vel`, `pos_accel`, `rot_vel` and
+`rot_accel` — **all remain 0.000**. So velocity/acceleration cannot currently be driven, and stays
+zeroed under injection. Either they write state `getHeadTrackingData` does not expose, or they are
+consumed elsewhere. Recorded as unresolved rather than guessed.
+
+**Why it matters:** Meta's compositor predicts ahead using velocity. With velocity pinned at zero,
+prediction degenerates to "pose holds still", which should show up as motion-to-photon latency
+rather than breakage. This is the most likely cause if the rendered result feels laggy.
+
+## What is still NOT proven
+
+A pose in `dumpsys`/`getHeadTrackingData` is **not** proof the compositor renders from it. The
+step-4 criterion — *Meta's shell responds to head motion for ≥ 10 minutes* — needs someone looking
+through the headset while injection runs. That is the next real test, and it needs the wearer.
