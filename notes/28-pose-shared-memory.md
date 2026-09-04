@@ -101,10 +101,29 @@ One caveat on interpretation: the *distinct pose* rate here is 34 Hz, but that i
 **source** — the injection driving this test publishes at 30 Hz — not by the logger, which sampled
 at 60 Hz without error. Against live tracking the distinct rate will be whatever Meta produces.
 
-## What step 2 still needs
+## Simultaneity: tested, and it does NOT work
 
-The logger is done; the ground-truth *comparison* is not. It needs a worn capture with our sensors
-recorded in the **same session** as Meta's poses, then time alignment and ATE/RPE. Note the two are
-not trivially simultaneous: our camera stack needs the sensors HAL stopped, and Meta's tracker needs
-it running. `notes/23` showed the contention is with the HAL rather than `trackingservice`, so this
-needs checking — Meta's poses may keep flowing from IMU alone with the HAL down, or may not.
+The ground-truth comparison needs our sensors and Meta's poses in the **same session**. Measured:
+
+| configuration | result |
+|---|---|
+| sensors HAL **up** | logger works; **30 Hz of genuine Meta poses**, no injection needed |
+| sensors HAL **down** + our camera capture | camera capture fine (4/4 pipelines, 481 frames/cam, 0 Meta libs) but **`trackingservice` restarts and no longer maps `TrackingServiceHeadTracker`** — the logger reports "not mapped in pid 29682" |
+| HAL restarted | region reappears, logger back to 30 Hz |
+
+So stopping the HAL does not merely inconvenience Meta's tracker, it removes its pose output
+entirely — which makes sense, since with no sensor source there is nothing to track with.
+
+**This sharpens the earlier correction in `notes/23`, it does not undo it.** Two different questions:
+
+- **Camera capture + pose *injection*** — **works.** That is what step 4's live closed loop needs,
+  and it is proven.
+- **Camera capture + Meta's own *tracking output*** — **does not work.** That is what step 2's
+  ground truth needs.
+
+So step 2 is back to the route `notes/18` originally specified: **revive the leech** (`notes/09`,
+`notes/10`) to read frames while the HAL and `trackingservice` both run. The non-simultaneous
+fallback (walk the same route twice) remains available but is much weaker.
+
+Incidental confirmation: the region address moved from `0x7f1f1c8000` to `0x7034453000` across a
+restart, so resolving it by name from `/proc/<pid>/maps` rather than hardcoding was necessary.
