@@ -89,12 +89,16 @@ static int parse_hexbytes(const char *s, unsigned char *out, size_t cap) {
     while (*p && n < cap) {
         while (*p == ' ' || *p == ':') p++;
         if (!*p) break;
+        if (!p[1]) return -1;                 // odd number of hex digits
         char h[3] = {p[0], p[1], 0};
         char *end;
         unsigned long v = strtoul(h, &end, 16);
         if (end == h) return -1;
         out[n++] = (unsigned char)v;
-        p = end;
+        // `end` points into the LOCAL buffer h, not into s. Assigning p = end walked the cursor
+        // into stack memory, so only the first byte was ever parsed and every scan ran with a
+        // 1-byte pattern -- which is why it appeared to "match" constantly and uselessly.
+        p += 2;
     }
     return (int)n;
 }
@@ -156,7 +160,10 @@ int main(int argc, char **argv) {
         }
         long hits = 0;
         for (int i = 0; i < g_nreg && hits < maxhits; i++) {
-            if (g_regs[i].perms[1] != 'r') continue;
+            // perms is "rwxp"-style: index 0 is READ. This was perms[1], which is the write bit,
+            // so the test was true for every region and scan silently skipped all of them --
+            // every "0 hits" result from this tool before 2026-09-04 is meaningless.
+            if (g_regs[i].perms[0] != 'r') continue;
             uint64_t sz = g_regs[i].end - g_regs[i].start;
             if (sz > (uint64_t)1 << 30) continue;
             size_t chunk = 65536;
