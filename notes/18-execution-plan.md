@@ -174,10 +174,12 @@ most convincing proof the core is correct.
 3. Run our VIO as a daemon at frame rate, feeding poses in.
 
 **Acceptance criteria**
-- [ ] `dumpsys tracking` reports **our** poses, `Valid: Yes`, `Tracking Level: 6DOF`
+- [x] `dumpsys tracking` reports **our** poses, `Valid: Yes`, `Tracking Level: 6DOF` (`notes/23`)
 - [ ] Meta's shell renders and responds to head motion for ≥ 10 minutes without losing tracking
 - [ ] Motion-to-photon latency measured and within **2×** of stock (method stated)
-- [ ] Zero crashes of `com.oculus.systemdriver` over a 10-minute session
+- [x] Zero crashes over a 10-minute session — **0 restarts of `trackingservice`/`vrshell`,
+      ~18,000 poses at 30 Hz, 0 injection failures** (`notes/26`). NOTE: `com.oculus.systemdriver`
+      does not exist on this device; criterion restated against the processes that do.
 
 **Kill criteria.** If neither injection nor the Binder interface is practical, skip in-place
 replacement — it is throwaway adapter work — and go straight to Monado.

@@ -91,3 +91,58 @@ And Meta's tracker, driven by it: `pos=(-0.0576, +0.0710, -0.1038) valid=True`.
 - **p90 is 67 ms** against a 33.3 ms budget, well above the 31.75 ms median measured in `notes/20`.
   Frame drops under load are likely, and `notes/20`'s caveat — that the median fits but the tail
   does not — now has teeth.
+
+---
+
+# 10-minute injection soak — and a monitor that was killing the service
+
+## The trap: `dumpsys | grep -m1` sends SIGPIPE
+
+A 10-minute soak looping our VIO trajectory into the injection interface showed
+**`trackingservice` restarting on almost every cycle** — 9 restarts in 10 cycles. The obvious
+reading was that sustained injection destabilises it. That reading was wrong.
+
+```
+init: Service 'trackingservice' (pid 25070) received signal 13
+init: updatable process 'trackingservice' exited 4 times in 4 minutes
+init: starting service 'trackingservice'...
+```
+
+**Signal 13 is SIGPIPE.** The monitor ran `dumpsys tracking | grep -m1 ...`; `grep -m1` exits after
+its first match, closing the pipe while `trackingservice` is still writing its dump. The service
+takes SIGPIPE and init restarts it. **The monitoring command was killing the service it monitored.**
+
+This also explains `Failed to write while dumping service tracking: Broken pipe`, which appears
+throughout this session's logs and had been treated as cosmetic noise. It was not: **any earlier
+observation taken immediately after a `dumpsys tracking | grep -m1` may reflect a service that had
+just been killed and restarted** — including at least one `getHeadTrackingData` returning `{}` and
+one unexplained drop to 3DOF. Those readings should not be trusted.
+
+Safe form — consume the whole dump, then filter:
+```sh
+out=$(dumpsys tracking 2>/dev/null)
+lvl=$(echo "$out" | grep -o "[0-9]DOF" | head -1)
+```
+
+## Result with the monitor fixed
+
+| metric | result |
+|---|---|
+| duration | **607 s** (29 cycles) |
+| poses injected | 29 x 621 = **~18,000 at 30 Hz** |
+| injection failures | **0** (29/29 cycles reported `0 failed`) |
+| `trackingservice` restarts | **0** |
+| `vrshell` restarts | **0** |
+| tracking level | **6DOF throughout** |
+
+Sustained injection at frame rate is stable for at least ten minutes.
+
+## A criterion in notes/18 names a process that does not exist
+
+Step 4 asks for *"zero crashes of `com.oculus.systemdriver` over a 10-minute session"*.
+**`com.oculus.systemdriver` does not run on this device.** The shell-side processes are
+`com.oculus.shellenv`, `com.oculus.systemux:SystemUX` and `com.oculus.vrshell`. The soak monitored
+`trackingservice` and `vrshell`; the criterion should be restated against those.
+
+Still outstanding for step 4: *"Meta's shell renders and responds to head motion for >= 10 minutes"*
+needs someone wearing the headset — stability is now shown, responsiveness is not.
