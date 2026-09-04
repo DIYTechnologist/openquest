@@ -182,6 +182,14 @@ int main(int argc, char **argv) {
   bool pend_ok[4] = {false, false, false, false};
 
   long n_imu = 0, n_frame = 0, n_pair = 0, n_inj = 0, n_injfail = 0;
+  // How far AHEAD of each frame the IMU has advanced when that frame is fed. The offline runner
+  // guarantees IMU_LEAD_S = 0.10 s of look-ahead; a live consumer can only feed what has arrived,
+  // and if this is negative the estimator is being handed images it cannot yet propagate to.
+  double t_last_imu = 0;
+  std::vector<double> lead_ms;
+  // IMU arriving out of device-time order would be silently discarded by the estimator: chunk
+  // arrival is bursty, so a late chunk can carry samples older than an already-processed frame.
+  double t_prev_imu = 0; long n_imu_ooo = 0, n_imu_stale = 0;
   double t_first_pose = -1, t_last_pose = -1;
   std::vector<double> proc_ms;
 
@@ -211,7 +219,11 @@ int main(int argc, char **argv) {
         m.wm(i) = (Rg[i*3+0]*gr[0] + Rg[i*3+1]*gr[1] + Rg[i*3+2]*gr[2]) * DEG;
         m.am(i) = (Ra[i*3+0]*ar[0] + Ra[i*3+1]*ar[1] + Ra[i*3+2]*ar[2]) * G;
       }
+      if (t_prev_imu > 0 && t < t_prev_imu) n_imu_ooo++;
+      if (n_pair > 0 && t < pend_t[0]) n_imu_stale++;
+      t_prev_imu = t;
       sys->feed_measurement_imu(m);
+      if (t > t_last_imu) t_last_imu = t;
       n_imu++;
       continue;
     }
@@ -263,6 +275,7 @@ int main(int argc, char **argv) {
     pend_ok[0] = pend_ok[2] = false;
     n_pair++;
 
+    lead_ms.push_back((t_last_imu - cam.timestamp) * 1e3);
     struct timespec a, b;
     clock_gettime(CLOCK_MONOTONIC, &a);
     sys->feed_measurement_camera(cam);
@@ -294,6 +307,24 @@ int main(int argc, char **argv) {
   if (!proc_ms.empty()) {
     std::sort(proc_ms.begin(), proc_ms.end());
     med = proc_ms[proc_ms.size() / 2];
+  }
+  // How constant is the V4L2<->exposure offset really? A constant offset is only valid if this is
+  // tight; if it is noisy, every frame carries timing error that per-frame snapping would not have.
+  fprintf(stderr, "[+] IMU out-of-order: %ld/%ld (%.2f%%), older-than-last-frame: %ld\n",
+          n_imu_ooo, n_imu, 100.0 * n_imu_ooo / (n_imu ? n_imu : 1), n_imu_stale);
+  if (off_samples.size() > 10) {
+    std::vector<double> v(off_samples.begin(), off_samples.end());
+    std::sort(v.begin(), v.end());
+    fprintf(stderr, "[+] V4L2-exposure offset spread (ms): p10=%.2f median=%.2f p90=%.2f range=%.2f\n",
+            (v[v.size()/10]-v[v.size()/2])*1e-6, 0.0,
+            (v[9*v.size()/10]-v[v.size()/2])*1e-6, (v.back()-v.front())*1e-6);
+  }
+  if (!lead_ms.empty()) {
+    std::vector<double> L = lead_ms;
+    std::sort(L.begin(), L.end());
+    long neg = 0; for (double x : lead_ms) if (x < 0) neg++;
+    fprintf(stderr, "[+] IMU lead at camera feed (ms): p10=%.1f median=%.1f p90=%.1f  negative on %ld/%zu (%.1f%%)\n",
+            L[L.size()/10], L[L.size()/2], L[9*L.size()/10], neg, L.size(), 100.0*neg/L.size());
   }
   fprintf(stderr,
           "\n[+] imu=%ld expo=%ld frames=%ld pairs=%ld injected=%ld failed=%ld\n"

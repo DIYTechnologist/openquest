@@ -68,12 +68,26 @@ And Meta's tracker, driven by it: `pos=(-0.0576, +0.0710, -0.1038) valid=True`.
 
 - **Not yet run fully live with motion.** Capture-live and estimate-on-replay are each validated;
   the two have not been run together against real movement, which needs someone to move the headset.
-- **The live consumer does not reproduce the offline result exactly.** Offline: initialised 53.9 s
-  in, tracked 21.1 s, final ‖p‖ 0.203 m. Live-path replay: initialised ~63 s in, tracked 11.17 s,
-  ending near (−0.05, −0.45, 0.11). Same order, bounded, but not the same trajectory. The likely
-  cause is IMU lead: the offline runner feeds IMU *ahead* of each frame (`IMU_LEAD_S`), while the
-  live path can only feed what has arrived. Unresolved, and it should be resolved before any
-  accuracy claim is attached to the live path.
+- **The live consumer does not reproduce the offline result exactly, and I have not found out why.**
+  Offline: initialised 53.9 s in (~1611 pairs), tracked 21.1 s, final ‖p‖ 0.203 m. Live-path replay:
+  initialised ~63 s in (1892 pairs), tracked 11.17 s. Same order, bounded, but ~9 s later to
+  initialise.
+
+  Three candidate mechanisms were proposed and **all three are disproved by measurement**:
+
+  | hypothesis | measured | verdict |
+  |---|---|---|
+  | Insufficient IMU lead (offline uses `IMU_LEAD_S` = 0.10 s) | live lead median **23.6 ms**, negative on 0.2 % | not the cause — lead is positive and sufficient |
+  | Timestamp jitter from a constant V4L2→exposure offset instead of per-frame snapping | offset spread **±0.02 ms**, full range 0.08 ms | not the cause — the offset really is constant |
+  | IMU delivered out of order by bursty chunk arrival, silently discarded | **0 / 74388 out of order**; 46 older than the last frame | not the cause |
+
+  So the feed into the estimator is clean. The leading remaining hypothesis is that the **on-device
+  OpenVINS build differs from the docker one** — notably a different OpenCV, which changes feature
+  detection and therefore how quickly initialisation accumulates enough disparity. That is testable
+  by running the on-device `ov_bench` against a EuRoC dataset on the device and comparing with the
+  host result, which needs the ~1.1 GB dataset pushed; not done.
+
+  **Recorded as open.** No accuracy claim should be attached to the live path until it is closed.
 - **p90 is 67 ms** against a 33.3 ms budget, well above the 31.75 ms median measured in `notes/20`.
   Frame drops under load are likely, and `notes/20`'s caveat — that the median fits but the tail
   does not — now has teeth.
