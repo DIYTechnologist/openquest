@@ -31,6 +31,8 @@
 #include <signal.h>
 #include <time.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <sys/stat.h>
 
 #include <linux/ion.h>
 #include <linux/media.h>
@@ -81,6 +83,38 @@ static int sb_prop(const char *what, unsigned char prop, const void *val, unsign
   usleep(20000);
   return rc;
 }
+// Drains /dev/syncboss_stream0 to syncboss.raw for the whole capture, recording (host_time,
+// byte_offset) chunk boundaries. build_euroc_direct.py uses those to fit the nRF clock to host
+// time: the 0xe0 exposure stamps and the 0x50 IMU stamps do NOT share an epoch, so they cannot be
+// paired directly (cam_direct.c:690).
+static volatile int g_imu_run = 1;
+static const char *g_outdir = "/data/local/tmp/camkernel";
+static void *imu_thread(void *arg) {
+  int out = *(int *)arg;
+  char p[256]; snprintf(p, sizeof p, "%s/syncboss_chunks.csv", g_outdir);
+  FILE *idx = fopen(p, "w");
+  if (idx) fprintf(idx, "#host_mono_ns,byte_offset,bytes\n");
+  unsigned char buf[65536];
+  unsigned long long off = 0;
+  // poll() not a blocking read(), so the thread observes g_imu_run and can be joined
+  // deterministically -- otherwise the tail of syncboss.raw is lost at exit.
+  while (g_imu_run) {
+    struct pollfd pfd = { .fd = sb_stream_fd, .events = POLLIN };
+    if (poll(&pfd, 1, 100) <= 0) continue;
+    ssize_t n = read(sb_stream_fd, buf, sizeof buf);
+    if (n > 0) {
+      struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+      if (write(out, buf, (size_t)n) != n) break;
+      if (idx) fprintf(idx, "%llu,%llu,%zd\n",
+                       (unsigned long long)ts.tv_sec * 1000000000ull + ts.tv_nsec, off, n);
+      off += (unsigned long long)n;
+    } else if (n < 0 && errno != EAGAIN && errno != EINTR) break;
+  }
+  if (idx) { fflush(idx); fclose(idx); }
+  printf("[+] syncboss stream: %llu bytes\n", off);
+  return NULL;
+}
+
 static int mcu_open_and_power(void) {
   // Held open for the whole session: stop_streaming_locked() force-releases the cameras (regulators
   // + MCLK) when the last streaming client goes away. This was unchecked, which is a silent way to
@@ -108,6 +142,10 @@ static int mcu_configure(int ncam, uint16_t exposure, uint16_t gain) {
     rc |= sb_send("set_exposure_gain", 0x2a, 0, eg, sizeof eg);
   }
   rc |= sb_prop("set_frame_tag_mode(1)", 0x8d, &tag, 1);
+  // IMU streaming has its own enable -- a camera probe alone produces NO 0x50 packets (confirmed by
+  // tools/sb_survey). libsyncboss's syncboss_imu_enable is message type 110; this is that packet
+  // without the blob.
+  rc |= sb_send("imu_enable", 0x6e, sb_seq++, &n8, 1);
   return rc;
 }
 static int mcu_start(int ncam) {
@@ -599,6 +637,15 @@ int main(int argc, char **argv) {
   int secs = argc > 2 ? atoi(argv[2]) : 3;
   uint16_t exposure = argc > 3 ? (uint16_t)atoi(argv[3]) : 3000;
   uint16_t gain = argc > 4 ? (uint16_t)atoi(argv[4]) : 160;
+  // Which cameras to persist. Writing all four at full rate is ~74 MB/s, which this device's UFS
+  // will not sustain -- and dropped writes show up as dropped FRAMES. Default to the cam0/cam2 pair
+  // (best overlap and baseline, notes/15) and bright frames only, which is what the VIO builder
+  // keeps anyway. "-1" means save none (parity/diagnostic runs).
+  const char *savecams = argc > 5 ? argv[5] : "";
+  g_outdir = argc > 6 ? argv[6] : "/data/local/tmp/camkernel";
+  int save_mask = 0;
+  for (const char *q = savecams; *q; q++) if (*q >= '0' && *q <= '3') save_mask |= 1 << (*q - '0');
+  int dataset = save_mask != 0;
   if (ncam > MAXCAM) ncam = MAXCAM;
 
   // Line-buffer stdout: this runs detached with output redirected to a file, so the default block
@@ -680,12 +727,25 @@ int main(int argc, char **argv) {
   mcu_start(ncam);
   usleep(400000);
 
-  mkdir("/data/local/tmp/camkernel", 0755);
+  mkdir(g_outdir, 0755);
+  char pbuf[256];
+  FILE *fidx = NULL;
+  pthread_t imu_th; int imu_started = 0, rawfd = -1;
+  if (dataset) {
+    snprintf(pbuf, sizeof pbuf, "%s/raw", g_outdir); mkdir(pbuf, 0755);
+    snprintf(pbuf, sizeof pbuf, "%s/frames.csv", g_outdir);
+    fidx = fopen(pbuf, "w");
+    if (fidx) fprintf(fidx, "#seq,cam,ts_ns,file\n");
+    snprintf(pbuf, sizeof pbuf, "%s/syncboss.raw", g_outdir);
+    rawfd = open(pbuf, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (rawfd >= 0 && pthread_create(&imu_th, NULL, imu_thread, &rawfd) == 0) imu_started = 1;
+    printf("[%c] dataset mode: cams=0x%x -> %s\n", imu_started ? '+' : '-', save_mask, g_outdir);
+  }
   // Every frame's kernel timestamp, for offline FSIN-pairing and delivery-rate analysis. Buffered
   // and closed after the loop so logging never perturbs the timing it is measuring.
   FILE *tsf = fopen("/data/local/tmp/camkernel/ts.csv", "w");
   if (tsf) fprintf(tsf, "cam,seq,buf_index,sec,usec,roi_mean\n");
-  int got[MAXCAM] = {0};
+  int got[MAXCAM] = {0}, saved[MAXCAM] = {0};
   double t_end = now_s() + secs;
   while (now_s() < t_end) {
     for (int i = 0; i < ncam; i++) {
@@ -696,7 +756,26 @@ int main(int argc, char **argv) {
       vb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE; vb.memory = V4L2_MEMORY_USERPTR;
       vb.m.planes = dpl; vb.length = 1;
       if (ioctl(cams[i].vfd, VIDIOC_DQBUF, &vb) < 0) continue;
-      if (got[i] < 12 && vb.index < NBUF) {
+      if (dataset && (save_mask & (1 << i)) && vb.index < NBUF) {
+        // Classify with the SAME sampling build_euroc_direct.py uses (every 64th pixel, skipping
+        // the metadata row) so "bright" here means exactly what it means there. A per-camera ROI
+        // stripe will not do: the stripe means differ 5..195 across cameras.
+        const unsigned char *px = cams[i].buf[vb.index].va;
+        unsigned long sum = 0; int nsamp = 0;
+        for (int k = W * 1; k < W * (1 + 480); k += 64) { sum += px[k]; nsamp++; }
+        if (nsamp && (double)sum / nsamp >= 20.0) {
+          char fn[64], fp[320];
+          snprintf(fn, sizeof fn, "c%d_%06d.gray", i, got[i]);
+          snprintf(fp, sizeof fp, "%s/raw/%s", g_outdir, fn);
+          int f = open(fp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+          if (f >= 0) { if (write(f, px, FRAME_SZ) < 0) {} close(f); }
+          if (fidx) fprintf(fidx, "%d,%d,%lld,%s\n", got[i], i,
+                            (long long)vb.timestamp.tv_sec * 1000000000ll +
+                            (long long)vb.timestamp.tv_usec * 1000ll, fn);
+          saved[i]++;
+        }
+      }
+      if (!dataset && got[i] < 12 && vb.index < NBUF) {
         const unsigned char *px = cams[i].buf[vb.index].va;
         unsigned long sum = 0;
         for (int k = 0; k < FRAME_SZ; k++) sum += px[k];
@@ -726,6 +805,14 @@ int main(int argc, char **argv) {
     usleep(2000);
   }
   if (tsf) fclose(tsf);
+  if (imu_started) { g_imu_run = 0; pthread_join(imu_th, NULL); }
+  if (rawfd >= 0) close(rawfd);
+  if (fidx) { fflush(fidx); fclose(fidx); }
+  if (dataset) {
+    printf("[frames saved] ");
+    for (int i = 0; i < ncam; i++) if (save_mask & (1 << i)) printf("cam%d=%d ", i, saved[i]);
+    printf("\n");
+  }
   // Decisive diagnostic: read the ION buffers DIRECTLY, regardless of DQBUF. This separates
   // "hardware never captured anything" from "hardware captured fine but the buffer-done handoff
   // back to userspace is broken" -- two completely different bugs that look identical from DQBUF.
