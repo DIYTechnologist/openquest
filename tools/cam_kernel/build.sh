@@ -22,3 +22,6 @@ cp "$K"/drivers/staging/android/uapi/ion.h .kinc/linux/       # ION is Android-o
 
 "$CC" -shared -fPIC -O2 -o libioctl_trace.so ioctl_trace.c -I. -I.kinc -ldl
 echo "built $HERE/libioctl_trace.so"
+
+"$CC" -O2 -o cam_kernel cam_kernel.c -I. -I.kinc
+echo "built $HERE/cam_kernel"

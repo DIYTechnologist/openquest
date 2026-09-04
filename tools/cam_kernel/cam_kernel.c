@@ -82,8 +82,16 @@ static int sb_prop(const char *what, unsigned char prop, const void *val, unsign
   return rc;
 }
 static int mcu_open_and_power(void) {
-  sb_stream_fd = open(SB_STREAM, O_RDONLY);   // held open: the driver releases cameras otherwise
+  // Held open for the whole session: stop_streaming_locked() force-releases the cameras (regulators
+  // + MCLK) when the last streaming client goes away. This was unchecked, which is a silent way to
+  // get a perfectly configured pipeline and no photons -- every block from CSIPHY to VFE programs
+  // identically to the working control, and nothing ever reports an error.
+  sb_stream_fd = open(SB_STREAM, O_RDONLY);
+  printf("[%c] open %s -> fd %d%s\n", sb_stream_fd < 0 ? '-' : '+', SB_STREAM, sb_stream_fd,
+         sb_stream_fd < 0 ? strerror(errno) : "");
+  if (sb_stream_fd < 0) { perror("open " SB_STREAM); return -1; }
   sb_fd = open(SB_DEV, O_RDWR);
+  printf("[%c] open %s -> fd %d\n", sb_fd < 0 ? '-' : '+', SB_DEV, sb_fd);
   if (sb_fd < 0) { perror("open " SB_DEV); return -1; }
   unsigned char none = 0;
   return sb_send("camera_probe(power on)", 0x28, 0, &none, 0);
@@ -286,12 +294,16 @@ static int csid_cfg(int fd, int i) {
   return xioctl(fd, VIDIOC_MSM_CSID_IO_CFG, &c, "CSID_CFG");
 }
 
-static int ispif_call(int fd, int cfgtype, int vfe_intf, int csid, const char *what) {
+// intftype selects which ISPIF interface the CSID feeds. Two cameras share a VFE here, so they
+// cannot both land on RDI0 -- the second silently overwrites the first's route and never delivers
+// a frame. The vendor pairs csid0->RDI0/vfe0, csid1->RDI1/vfe0, csid2->RDI0/vfe1, csid3->RDI1/vfe1,
+// matching the VFE-side input_src/stream_src alternation below.
+static int ispif_call(int fd, int cfgtype, int vfe_intf, int csid, int intftype, const char *what) {
   struct ispif_cfg_data c; memset(&c, 0, sizeof c);
   c.cfg_type = (enum ispif_cfg_type_t)cfgtype;
   c.params.num = 1;
   c.params.entries[0].vfe_intf = (enum msm_ispif_vfe_intf)vfe_intf;
-  c.params.entries[0].intftype = RDI0;
+  c.params.entries[0].intftype = (enum msm_ispif_intftype)intftype;
   c.params.entries[0].num_cids = 1;
   c.params.entries[0].cids[0] = (enum msm_ispif_cid)0;
   c.params.entries[0].csid = (enum msm_ispif_csid)csid;
@@ -304,11 +316,11 @@ static int ispif_call(int fd, int cfgtype, int vfe_intf, int csid, const char *w
 // pointing at a 724-byte msm_ispif_param_data_ext. Captured contents: the same single entry as
 // CFG, with pack_cfg[] all zeros and stereo disabled -- so it adds no new values, but the call
 // itself may still be required to arm the interface.
-static int ispif_cfg2(int fd, int vfe_intf, int csid) {
+static int ispif_cfg2(int fd, int vfe_intf, int csid, int intftype) {
   struct msm_ispif_param_data_ext e; memset(&e, 0, sizeof e);
   e.num = 1;
   e.entries[0].vfe_intf = (enum msm_ispif_vfe_intf)vfe_intf;
-  e.entries[0].intftype = RDI0;
+  e.entries[0].intftype = (enum msm_ispif_intftype)intftype;
   e.entries[0].num_cids = 1;
   e.entries[0].cids[0] = (enum msm_ispif_cid)0;
   e.entries[0].csid = (enum msm_ispif_csid)csid;
@@ -573,10 +585,11 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
 
   // ── ISPIF ──
   int vfe_intf = i / 2;
-  if (ispif_call(ispif_fd, ISPIF_CFG, vfe_intf, i, "ISPIF_CFG") < 0) return -1;
-  if (ispif_cfg2(ispif_fd, vfe_intf, i) < 0) return -1;
+  int intftype = (i % 2) ? RDI1 : RDI0;
+  if (ispif_call(ispif_fd, ISPIF_CFG, vfe_intf, i, intftype, "ISPIF_CFG") < 0) return -1;
+  if (ispif_cfg2(ispif_fd, vfe_intf, i, intftype) < 0) return -1;
   usleep(5000);
-  if (ispif_call(ispif_fd, ISPIF_START_FRAME_BOUNDARY, vfe_intf, i, "ISPIF_START") < 0) return -1;
+  if (ispif_call(ispif_fd, ISPIF_START_FRAME_BOUNDARY, vfe_intf, i, intftype, "ISPIF_START") < 0) return -1;
   LOGV("[+] cam%d pipeline up\n", i);
   return 0;
 }
@@ -704,7 +717,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < ncam; i++) {
     int t = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
     ioctl(cams[i].vfd, VIDIOC_STREAMOFF, &t);
-    ispif_call(ispif_fd, ISPIF_STOP_IMMEDIATELY, i / 2, i, "ISPIF_STOP");
+    ispif_call(ispif_fd, ISPIF_STOP_IMMEDIATELY, i / 2, i, (i % 2) ? RDI1 : RDI0, "ISPIF_STOP");
   }
   close(ispif_fd);
 

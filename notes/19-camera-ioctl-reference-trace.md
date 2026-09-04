@@ -685,3 +685,84 @@ CSID configured correctly, ISPIF routed correctly, ISP buffers mapped to real IO
 and the VFE never raises a frame interrupt. The fault is squarely between the sensor emitting CSI
 data and the VFE being told about it, with every userspace-visible configuration now verified
 identical to the working path.
+
+## Session 6 — B2 delivers frames from all four cameras — 2026-09-04
+
+**B2 is complete.** `cam_kernel` captures 302 frames/camera over 5 s from all four tracking
+cameras with zero Meta userspace blobs. Two bugs, both invisible to every check made before.
+
+### Bug 1: the MCU was never told to stream
+
+`camera_init` (0x2e) and `start_streaming` (0x2c) both carry `num_cams`. Every B2 run had used
+`ncam=1`; **the MCU streams nothing at all when told 1**, so no sensor emitted a single MIPI
+packet. The control (`cam_direct all`) always passed 4, which is why it worked.
+
+This is why five sessions of pipeline debugging found nothing: CSIPHY, CSID, ISPIF and VFE were
+correct the entire time. The bisection that finally located it:
+
+| block | B1 (works) | B2 (no frames) |
+|---|---|---|
+| CSIPHY `lane_config` | mask 0x3, cnt 1, settle 0xe, lane_enable 0x81 | **identical** |
+| CSID `csid_params` | lane_cnt 1, lane_assign 0x4320→0x3210, dt 0x2a, df 1 | **identical** |
+| ISPIF `config` (cam0) | intftype 1, vfe_intf 0, csid 0 | **identical** |
+| VFE `reserve_wm` / `ping_pong` / `reg_update` | wm 0, mask 2 | **identical** |
+| `ispif_process_irq` (SOF) | RDI0/RDI1 frame id 0,1 | **zero** |
+| `msm_vfe47_*` IRQs | 96 | **zero** |
+
+Identical configuration, no interrupts anywhere — that pattern means *no photons*, not a
+misconfigured block. The break had to be upstream of CSIPHY, i.e. the sensor itself.
+
+### Bug 2: all four cameras routed to ISPIF RDI0
+
+`ispif_call()`/`ispif_cfg2()` hardcoded `intftype = RDI0`. Two cameras share a VFE, so cam1 and
+cam3 silently overwrote cam0's and cam2's routes and never delivered. The VFE side already
+alternated (`VFE_RAW_0 + i%2`, `RDI_INTF_0 + i%2`); ISPIF never got the same treatment. Vendor
+mapping, now matched:
+
+```
+csid0 -> RDI0 (intftype 1) / vfe0      csid1 -> RDI1 (intftype 3) / vfe0
+csid2 -> RDI0 (intftype 1) / vfe1      csid3 -> RDI1 (intftype 3) / vfe1
+```
+
+Only after bug 1 was fixed did bug 2 become observable — with `ncam=1` the odd cameras never ran,
+which is the same class of masking as the `VFE_RAW_0` hardcode in session 4.
+
+### CSID `0x800` — closed for good
+
+Claimed twice as evidence of absent CSI data. It is identical (`0x800`, 3×) in the working control
+and in the dead run, and is present in runs that deliver 302 frames/camera. It is reset-done. It
+never carried information about data flow.
+
+### Method note
+
+The one check never run in five sessions was the **A/B diff of the same debug output against the
+working control**. Enabling `msm_isp47.c`/`msm_csiphy.c` `dynamic_debug` on both paths and diffing
+took one run each and eliminated the entire pipeline as a suspect. Instrumenting the failing path
+alone cannot distinguish "misconfigured" from "correct but starved"; only the control can.
+
+### Unrelated device fault found en route: UFS link death
+
+Mid-session, all writes to `/data` began hanging while by-name reads stayed instant. This was **not**
+filesystem corruption (`/data` is **ext4**, mounted `rw`, no fs errors) — the UFS link died during
+idle clock-gating and could not recover:
+
+```
+pwr ctrl cmd 0x17 with mode 0x0 completion timeout
+Clk gate=1, hibern8 on idle=4
+__ufshcd_uic_hibern8_enter: hibern8 enter failed. ret = -110
+ufshcd_host_reset_and_restore: Host init failed -110
+```
+
+Consequences worth knowing, because they silently corrupt an experiment:
+- `adb push` **reports success and writes only page cache** — the file reads back empty after reboot.
+  Verify pushes with `sync` + `md5sum` when this is suspected.
+- `adb reboot` does nothing (init blocks on unmount). `echo b > /proc/sysrq-trigger` recovers.
+
+Mitigation, applied at the top of the run scripts:
+```sh
+echo 0 > /sys/devices/soc/1da4000.ufshc/clkgate_enable
+echo 0 > /sys/devices/soc/1da4000.ufshc/hibern8_on_idle_enable
+```
+Whether the instrumented kernel makes this more likely is **untested** — our config is byte-identical
+to stock except `CONFIG_SYSTEM_TRUSTED_KEYS`, but the toolchain differs and the hibern8 handshake is
+timing-sensitive. Falsifiable test: flash stock boot, leave idle, see if it recurs.
