@@ -88,6 +88,38 @@ static int sb_prop(const char *what, unsigned char prop, const void *val, unsign
 // time: the 0xe0 exposure stamps and the 0x50 IMU stamps do NOT share an epoch, so they cannot be
 // paired directly (cam_direct.c:690).
 static volatile int g_imu_run = 1;
+static int g_stream = 0;               // outdir "-" => emit a binary stream
+// The binary stream gets its OWN fd, duped from stdout, and stdout is then pointed at stderr. That
+// is the only reliable way to keep the stream clean: this file has many plain printf() status
+// lines, and silencing LOGV alone still let them corrupt the byte stream.
+static FILE *g_sout = NULL;
+
+// Live stream record. One writer (the main loop) so no stdout locking is needed; the IMU thread
+// hands samples over through g_iq below.
+//
+// The IMU and camera clocks do NOT share an epoch (notes/19; the offline builder fits them via
+// syncboss chunk arrival times), so every record carries BOTH the device clock and the host
+// monotonic time at which it was observed. That lets the consumer fit nRF->monotonic online exactly
+// as build_euroc_direct.py does offline, instead of assuming a shared timebase.
+struct rec {
+  uint8_t  type;      // 'I' imu, 'C' camera
+  uint8_t  cam;
+  uint16_t w, h;
+  uint64_t dev_ns;    // device clock: nRF us*1000 for IMU, V4L2 stamp for camera
+  uint64_t host_ns;   // CLOCK_MONOTONIC when observed
+  uint32_t bytes;     // payload length following the header
+} __attribute__((packed));
+
+#define EQ_CAP 1024
+struct expsample { uint64_t dev_ns, host_ns; };
+static struct expsample g_eq[EQ_CAP];
+static volatile unsigned g_eq_head = 0, g_eq_tail = 0;
+
+#define IQ_CAP 8192
+struct imusample { uint64_t dev_ns, host_ns; float g[3], a[3]; };
+static struct imusample g_iq[IQ_CAP];
+static volatile unsigned g_iq_head = 0, g_iq_tail = 0;   // single producer, single consumer
+static pthread_mutex_t g_iq_lock = PTHREAD_MUTEX_INITIALIZER;
 static const char *g_outdir = "/data/local/tmp/camkernel";
 static void *imu_thread(void *arg) {
   int out = *(int *)arg;
@@ -104,7 +136,46 @@ static void *imu_thread(void *arg) {
     ssize_t n = read(sb_stream_fd, buf, sizeof buf);
     if (n > 0) {
       struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
-      if (write(out, buf, (size_t)n) != n) break;
+      uint64_t host_ns = (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
+      if (g_stream) {
+        // Framing 01 03 00 <type> 00 <len>; type 0x50 len 36 is IMU:
+        //   u32 ts_us, u32 id, f32 accel[3] (g), f32 gyro[3] (deg/s), f32 temp
+        for (ssize_t i = 0; i + 6 <= n; ) {
+          if (!(buf[i] == 1 && buf[i+1] == 3 && buf[i+2] == 0 && buf[i+4] == 0)) { i++; continue; }
+          unsigned char t = buf[i+3], L = buf[i+5];
+          if (i + 6 + L > n) break;
+          if (t == 0xe0 && L == 14) {
+            // Camera exposure stamp, on the SAME nRF clock as the IMU. The u32 is at payload
+            // offset 1, not 0: reading it at 0 yields 8533 ms deltas (the low byte is a tag),
+            // at 1 it yields exactly 33333 us = 30 Hz. This is what removes the camera/IMU
+            // cross-clock problem -- V4L2 stamps are on CLOCK_MONOTONIC and sit ~816 ms away.
+            uint32_t eus; memcpy(&eus, buf + i + 6 + 1, 4);
+            unsigned h = g_eq_head, nx = (h + 1) % EQ_CAP;
+            if (nx != g_eq_tail) {
+              g_eq[h].dev_ns = (uint64_t)eus * 1000ull;
+              g_eq[h].host_ns = host_ns;
+              __sync_synchronize();
+              g_eq_head = nx;
+            }
+          }
+          if (t == 0x50 && L == 36) {
+            const unsigned char *pl = buf + i + 6;
+            uint32_t us; memcpy(&us, pl, 4);
+            float v[7]; memcpy(v, pl + 8, 28);
+            unsigned h = g_iq_head, nx = (h + 1) % IQ_CAP;
+            if (nx != g_iq_tail) {   // drop rather than block the SPI reader
+              g_iq[h].dev_ns = (uint64_t)us * 1000ull;
+              g_iq[h].host_ns = host_ns;
+              g_iq[h].a[0]=v[0]; g_iq[h].a[1]=v[1]; g_iq[h].a[2]=v[2];
+              g_iq[h].g[0]=v[3]; g_iq[h].g[1]=v[4]; g_iq[h].g[2]=v[5];
+              __sync_synchronize();
+              g_iq_head = nx;
+            }
+          }
+          i += 6 + L;
+        }
+      }
+      if (out >= 0 && write(out, buf, (size_t)n) != n) break;
       if (idx) fprintf(idx, "%llu,%llu,%zd\n",
                        (unsigned long long)ts.tv_sec * 1000000000ull + ts.tv_nsec, off, n);
       off += (unsigned long long)n;
@@ -113,6 +184,15 @@ static void *imu_thread(void *arg) {
   if (idx) { fflush(idx); fclose(idx); }
   printf("[+] syncboss stream: %llu bytes\n", off);
   return NULL;
+}
+
+// Single writer: only the capture loop calls this.
+static int emit(uint8_t type, uint8_t cam, uint16_t w, uint16_t h,
+                uint64_t dev_ns, uint64_t host_ns, const void *payload, uint32_t bytes) {
+  struct rec r = { type, cam, w, h, dev_ns, host_ns, bytes };
+  if (fwrite(&r, sizeof r, 1, g_sout) != 1) return -1;
+  if (bytes && fwrite(payload, 1, bytes, g_sout) != bytes) return -1;
+  return 0;
 }
 
 static int mcu_open_and_power(void) {
@@ -643,6 +723,15 @@ int main(int argc, char **argv) {
   // keeps anyway. "-1" means save none (parity/diagnostic runs).
   const char *savecams = argc > 5 ? argv[5] : "";
   g_outdir = argc > 6 ? argv[6] : "/data/local/tmp/camkernel";
+  g_stream = !strcmp(g_outdir, "-");
+  if (g_stream) {
+    int sfd = dup(STDOUT_FILENO);
+    if (sfd < 0) { perror("dup stdout"); return 1; }
+    g_sout = fdopen(sfd, "wb");
+    if (!g_sout) { perror("fdopen stream"); return 1; }
+    setvbuf(g_sout, NULL, _IOFBF, 1 << 20);
+    dup2(STDERR_FILENO, STDOUT_FILENO);   // every printf in this file now goes to stderr
+  }
   int save_mask = 0;
   for (const char *q = savecams; *q; q++) if (*q >= '0' && *q <= '3') save_mask |= 1 << (*q - '0');
   int dataset = save_mask != 0;
@@ -727,11 +816,16 @@ int main(int argc, char **argv) {
   mcu_start(ncam);
   usleep(400000);
 
-  mkdir(g_outdir, 0755);
+  if (!g_stream) mkdir(g_outdir, 0755);
   char pbuf[256];
   FILE *fidx = NULL;
   pthread_t imu_th; int imu_started = 0, rawfd = -1;
-  if (dataset) {
+  if (dataset && g_stream) {
+    // stream mode: no files, but the syncboss thread still runs (it is what parses the IMU)
+    rawfd = -1;
+    if (pthread_create(&imu_th, NULL, imu_thread, &rawfd) == 0) imu_started = 1;
+    fprintf(stderr, "[%c] stream mode: cams=0x%x -> stdout\n", imu_started ? '+' : '-', save_mask);
+  } else if (dataset) {
     snprintf(pbuf, sizeof pbuf, "%s/raw", g_outdir); mkdir(pbuf, 0755);
     snprintf(pbuf, sizeof pbuf, "%s/frames.csv", g_outdir);
     fidx = fopen(pbuf, "w");
@@ -748,6 +842,21 @@ int main(int argc, char **argv) {
   int got[MAXCAM] = {0}, saved[MAXCAM] = {0};
   double t_end = now_s() + secs;
   while (now_s() < t_end) {
+    if (g_stream) {   // drain IMU first so samples precede the frame they belong to
+      while (g_eq_tail != g_eq_head) {
+        struct expsample *e = &g_eq[g_eq_tail];
+        emit('E', 0, 0, 0, e->dev_ns, e->host_ns, NULL, 0);
+        __sync_synchronize();
+        g_eq_tail = (g_eq_tail + 1) % EQ_CAP;
+      }
+      while (g_iq_tail != g_iq_head) {
+        struct imusample *m = &g_iq[g_iq_tail];
+        float p[6] = { m->g[0], m->g[1], m->g[2], m->a[0], m->a[1], m->a[2] };
+        emit('I', 0, 0, 0, m->dev_ns, m->host_ns, p, sizeof p);
+        __sync_synchronize();
+        g_iq_tail = (g_iq_tail + 1) % IQ_CAP;
+      }
+    }
     for (int i = 0; i < ncam; i++) {
       struct pollfd pfd = { .fd = cams[i].vfd, .events = POLLIN | POLLPRI };
       if (poll(&pfd, 1, 5) <= 0) continue;
@@ -756,7 +865,18 @@ int main(int argc, char **argv) {
       vb.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE; vb.memory = V4L2_MEMORY_USERPTR;
       vb.m.planes = dpl; vb.length = 1;
       if (ioctl(cams[i].vfd, VIDIOC_DQBUF, &vb) < 0) continue;
-      if (dataset && (save_mask & (1 << i)) && vb.index < NBUF) {
+      if (g_stream && (save_mask & (1 << i)) && vb.index < NBUF) {
+        const unsigned char *px = cams[i].buf[vb.index].va;
+        unsigned long sum = 0; int nsamp = 0;
+        for (int k = W * 1; k < W * (1 + 480); k += 64) { sum += px[k]; nsamp++; }
+        if (nsamp && (double)sum / nsamp >= 20.0) {          // SLAM (long-exposure) frames only
+          struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+          emit('C', (uint8_t)i, W, H, (uint64_t)vb.timestamp.tv_sec * 1000000000ull +
+               (uint64_t)vb.timestamp.tv_usec * 1000ull,
+               (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec, px, FRAME_SZ);
+          saved[i]++;
+        }
+      } else if (dataset && (save_mask & (1 << i)) && vb.index < NBUF) {
         // Classify with the SAME sampling build_euroc_direct.py uses (every 64th pixel, skipping
         // the metadata row) so "bright" here means exactly what it means there. A per-camera ROI
         // stripe will not do: the stripe means differ 5..195 across cameras.
@@ -804,6 +924,7 @@ int main(int argc, char **argv) {
     }
     usleep(2000);
   }
+  if (g_sout) { fflush(g_sout); }
   if (tsf) fclose(tsf);
   if (imu_started) { g_imu_run = 0; pthread_join(imu_th, NULL); }
   if (rawfd >= 0) close(rawfd);
