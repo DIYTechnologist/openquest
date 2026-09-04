@@ -16,7 +16,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 |---|---|---|---|---|
 | 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
 | 1 | Direct-kernel camera (B2) | **DONE** — 5/5 (`notes/22`), final ‖p‖ 0.203 m | Meta libs needed by capture | **0** |
-| 2 | Ground truth vs Meta | **all tooling DONE** (`notes/30`); needs only the worn capture | ATE RMSE vs Meta poses | unknown |
+| 2 | Ground truth vs Meta | poses+IMU **captured & cross-validated r=0.997**; frames blocked by the ImageBuffer **pool** (`notes/31`) | ATE RMSE vs Meta poses | unknown |
 | 3 | Controllers | **stream found**: enable=213, data=0x8f, IMU decoded @501 Hz (`notes/27`) | button decode agreement | 0 % (needs presses) |
 | 4 | `trackingservice` in place | **task 1 DONE** — pose injection works (`notes/23`) | Meta shell on our poses | pose accepted, compositor unverified |
 | 5 | OS swap | not started | boots + tracks + streams | no |
@@ -103,9 +103,14 @@ Options, in order of preference:
 1. ⚠ Confirm the `getHeadTrackingData` JSON schema with the headset **worn** (it returned `{}` on a
    desk: proximity gates tracking to STANDBY/0DOF).
 2. Build a pose logger sampling Meta at ≥ 30 Hz with timestamps on the tracking clock.
-3. ~~Revive the leech to capture frames + IMU *while* trackingservice runs.~~ **DONE** — frames via
-   the leech (`notes/29`); IMU needs no interposition at all, because `/dev/syncboss_stream0` is a
-   multi-reader broadcast fifo and was never single-open (`notes/30`, lossless at 994 Hz).
+3. Revive the leech to capture frames + IMU *while* trackingservice runs. **IMU DONE** — needs no
+   interposition at all, because `/dev/syncboss_stream0` is a multi-reader broadcast fifo and was
+   never single-open (`notes/30`, lossless at 994 Hz). **FRAMES BLOCKED** — the `ImageBuffer` ctor
+   is a *pool allocation* event, not per-frame, so the leech yields ~96 frames per session, not
+   ~9000 (`notes/31`). Fix identified: learn `slot -> pixel VA` at ctor time, then read pixels on
+   each `MessageQueue<FrameSet>::read()` using the slot index in `w2`/`w14`.
+4. ⚠ **Worn session 1 done 2026-09-04** (`notes/31`): 160 s, Meta poses @ 59.7 Hz + IMU @ 993.6 Hz,
+   cross-validated at **r = 0.997**. Frames insufficient; one more worn session needed after the fix.
 4. ⚠ Worn capture, ≥ 2 minutes, including translation and fast rotation.
 5. Compare: time-align, then ATE/RPE against Meta.
 

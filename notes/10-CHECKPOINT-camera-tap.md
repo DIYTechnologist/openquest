@@ -1,5 +1,17 @@
 # CHECKPOINT — camera tap (resume file), 2026-09-01
 
+> **CORRECTION 2026-09-04 (`notes/31`).** Two claims below were measured false over a 150 s worn
+> session, and both only looked true because every capture here was <= 10 s:
+> - "`ImageBuffer` objects reconstructed **per frame**" — no. The ctor is a **pool allocation**
+>   event (16 slots). It fired 768 times in 151 s, in 4 bursts, while frames were delivered
+>   continuously at 119 Hz. The "576 frames" recorded below were a pool fill, not a 576-frame stream.
+> - "sd/pixel VAs move every frame -> a persistent-VA poller would fail" — the opposite. The VAs are
+>   a small recycled set, so a persistent-VA reader is the **correct** design.
+>
+> The OPEN THREAD below (per-frame exposure timestamps) is also solved by the same fix: the
+> FrameSet's `w2`/`w14` high dwords are the pool slot index 0..15, which links each FrameSet
+> timestamp to an `ImageBuffer` slot directly, instead of correlating the two hooks by host time.
+
 Read this first on resume. Goal of the project: replace Meta's VR blobs on a rooted Quest 1
 (`monterey`, msm8998) with an open stack (Monado/Basalt). This checkpoint covers the **camera
 frame tap** milestone. Broader context: [[quest1-open-vr-project]] (memory), `notes/08-vio-status.md`,
