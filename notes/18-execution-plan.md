@@ -22,6 +22,9 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 | 5 | OS swap | not started | boots + tracks + streams | no |
 | X | Real-time budget | **DONE** (`notes/20`) | VIO ms/frame on-device vs 33.3 | **31.75** (tuned) |
 
+**Checkpoint 2026-09-04: `notes/24`.** Steps 0, X and **1** are done; step 4's shortcut is proven
+(`notes/23`). Critical path is now **4 → 5**, all unattended until one worn session serves 2 and 3.
+
 ---
 
 ## Step 1 — Direct-kernel camera path (B2)
