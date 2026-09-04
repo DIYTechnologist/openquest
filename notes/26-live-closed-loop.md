@@ -81,13 +81,23 @@ And Meta's tracker, driven by it: `pos=(-0.0576, +0.0710, -0.1038) valid=True`.
   | Timestamp jitter from a constant V4L2→exposure offset instead of per-frame snapping | offset spread **±0.02 ms**, full range 0.08 ms | not the cause — the offset really is constant |
   | IMU delivered out of order by bursty chunk arrival, silently discarded | **0 / 74388 out of order**; 46 older than the last frame | not the cause |
 
-  So the feed into the estimator is clean. The leading remaining hypothesis is that the **on-device
-  OpenVINS build differs from the docker one** — notably a different OpenCV, which changes feature
-  detection and therefore how quickly initialisation accumulates enough disparity. That is testable
-  by running the on-device `ov_bench` against a EuRoC dataset on the device and comparing with the
-  host result, which needs the ~1.1 GB dataset pushed; not done.
+  So the feed into the estimator is clean. **RESOLVED 2026-09-04: it is not my consumer at all — it
+  is the build.** Running the *on-device* `ov_bench` against the same EuRoC dataset, through the
+  *offline* feeding path, initialises at the same late point:
 
-  **Recorded as open.** No accuracy claim should be attached to the live path until it is closed.
+  | run | build | OpenCV | feeding path | initialises at |
+  |---|---|---|---|---|
+  | host `euroc_runner` | docker | **4.5.4** | offline | ~1611 pairs |
+  | on-device `ov_bench` | android | **4.10.0** | offline | **1800–2000 pairs** |
+  | on-device `vio_live` | android | **4.10.0** | live stream | **1892 pairs** |
+
+  `vio_live` matches the on-device offline runner, not the host. Same dataset, same config, same
+  feeding logic — the only difference that tracks the result is the OpenCV version, which changes
+  feature detection and therefore how quickly initialisation accumulates enough disparity.
+
+  **Consequence worth carrying:** host and on-device results are **not directly comparable**. The
+  step-1 acceptance figure (final ‖p‖ 0.203 m, `notes/22`) was produced by the host build; it
+  remains valid as stated, but any future comparison must hold the build fixed.
 - **p90 is 67 ms** against a 33.3 ms budget, well above the 31.75 ms median measured in `notes/20`.
   Frame drops under load are likely, and `notes/20`'s caveat — that the median fits but the tail
   does not — now has teeth.
