@@ -189,6 +189,12 @@ continuous one-directional motion.
 6DOF, `Valid: Yes`) is met, and the load-bearing assumption behind it is verified rather than
 assumed. Meta's compositor is a usable consumer of an external pose source.
 
+## Device contention — CORRECTED: not a blocker
+
+**The paragraph below was wrong and is kept for the record; the correction follows.**
+
+### Original (incorrect) claim
+
 ## The next obstacle is device contention, not the interface
 
 Everything so far replays a **recorded** trajectory. Closing the loop live — camera → VIO →
@@ -208,3 +214,44 @@ it affects only the in-place demo. Options, unverified:
 
 Recorded as the next thing to determine. It does **not** invalidate what is proven here: the
 injection path works, at frame rate, with our own poses, and reaches the display.
+
+### Correction — measured 2026-09-04, same day
+
+I asserted that `trackingservice` holds `/dev/video0` and `/dev/syncboss0`. **It does not.** Its
+open fds are only ashmem/ion/binder. The actual holder is the **sensors HAL**:
+
+```
+sensors@1.0-ser  /dev/syncboss0  /dev/syncboss_control0  /dev/syncboss_powerstate0
+sensors@1.0-ser  /dev/syncboss_stream0  /dev/video0
+mrsystemservice  /dev/video33
+```
+
+So the conflict is with `vendor.oculus.hardware.sensors@1.0-service`, **not** with the service we
+inject into. Verified by stopping *only* the sensors HAL and leaving the framework and
+`trackingservice` up:
+
+| check | result |
+|---|---|
+| injection before capture | `Parcel(00000000 00000001)` = **true** |
+| `cam_kernel` 4 cameras | **4/4 pipelines, 302–303 frames each, all with data** |
+| Meta libs mapped during capture | **0** |
+| injection after capture | **true** |
+| afterwards | `trackingservice` running, zygote running, **6DOF Valid: Yes** |
+
+**Live closed-loop on the stock OS is therefore possible**: cameras → VIO → injection, with Meta's
+shell and compositor alive to render the result. Step 4's remaining criteria are reachable in place.
+
+Two consequences worth acting on:
+
+1. **Every capture script has been stopping far more than necessary** — `stop` (the whole framework)
+   and `stop trackingservice` as well as the HAL. Only the HAL stop is required. Keeping the
+   framework up is what makes a live demo possible at all.
+2. `ISPIF_INIT` returns `Operation not permitted` for cameras 1 and 2 under this minimal teardown,
+   yet all four pipelines come up and every camera delivers frames — ISPIF is already initialised by
+   camera 0. Benign here, but it is a real difference from the full-teardown path and should not be
+   assumed harmless in other configurations.
+
+**How I got it wrong:** I inferred the holder from `notes/18`'s statement that "`cam_direct` needs
+`trackingservice` stopped" and never checked which process actually held the fds — a one-command
+question (`readlink /proc/*/fd/*`). The same failure mode as the B2 hunt: reasoning about a system
+instead of measuring it.
