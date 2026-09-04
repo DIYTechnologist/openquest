@@ -16,7 +16,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 |---|---|---|---|---|
 | 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
 | 1 | Direct-kernel camera (B2) | **DONE** — 5/5 (`notes/22`), final ‖p‖ 0.203 m | Meta libs needed by capture | **0** |
-| 2 | Ground truth vs Meta | **logger DONE** (60 Hz, `notes/28`); needs a worn simultaneous capture | ATE RMSE vs Meta poses | unknown |
+| 2 | Ground truth vs Meta | **all tooling DONE** (`notes/30`); needs only the worn capture | ATE RMSE vs Meta poses | unknown |
 | 3 | Controllers | **stream found**: enable=213, data=0x8f, IMU decoded @501 Hz (`notes/27`) | button decode agreement | 0 % (needs presses) |
 | 4 | `trackingservice` in place | **task 1 DONE** — pose injection works (`notes/23`) | Meta shell on our poses | pose accepted, compositor unverified |
 | 5 | OS swap | not started | boots + tracks + streams | no |
@@ -103,7 +103,9 @@ Options, in order of preference:
 1. ⚠ Confirm the `getHeadTrackingData` JSON schema with the headset **worn** (it returned `{}` on a
    desk: proximity gates tracking to STANDBY/0DOF).
 2. Build a pose logger sampling Meta at ≥ 30 Hz with timestamps on the tracking clock.
-3. Revive the leech to capture frames + IMU *while* trackingservice runs.
+3. ~~Revive the leech to capture frames + IMU *while* trackingservice runs.~~ **DONE** — frames via
+   the leech (`notes/29`); IMU needs no interposition at all, because `/dev/syncboss_stream0` is a
+   multi-reader broadcast fifo and was never single-open (`notes/30`, lossless at 994 Hz).
 4. ⚠ Worn capture, ≥ 2 minutes, including translation and fast rotation.
 5. Compare: time-align, then ATE/RPE against Meta.
 
@@ -329,7 +331,7 @@ Step 2 is off the critical path entirely — it is validation, and blocks nothin
 |---|---|---|---|
 | **A** | Step 1: ioctl trace → MCU control → pipeline reimplementation | runs only, no handling | **now** |
 | **B** | Step X: cross-compile OpenVINS arm64, time on-device | runs only | **now** |
-| **C** | Step 2 prep: revive the leech, build the Meta pose logger | runs only | **now** |
+| **C** | ~~Step 2 prep: revive the leech, build the Meta pose logger~~ **DONE** (`notes/29`, `notes/30`) | runs only | complete |
 | **D** | Step 3 prep: syncboss stream survey for controller packet types | runs only | **now** |
 | **E** | Steps 2 + 3 capture: one worn session | ⚠ worn, controllers | after C and D |
 | **F** | Step 4: injection probe → daemon | ⚠ worn | after B |
