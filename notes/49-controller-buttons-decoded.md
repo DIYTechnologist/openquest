@@ -123,3 +123,39 @@ Every control on both controllers is now decoded from the raw MCU stream with **
 code**. What remains for step 3 is the architectural question `notes/18` flagged as the real risk:
 **where 6DoF controller pose is computed** — MCU, `trackingservice`, or camera IR blobs. Nothing in
 `0x8f` looks like a pose, which is evidence against the MCU but not proof.
+
+## Telling left from right without being told
+
+Meta never asks which controller is which, so handedness must be on the wire. Two bytes of the
+`0x8f` header qualify — both perfectly constant per controller and different between them, across
+two independent sessions:
+
+```
+                                       byte10   byte12   packets
+RIGHT  0143858a3ac372bd                  1        8      129,272 + 332
+LEFT   37b8c4d954a7596e                  0        9      129,692 + 74,871
+```
+
+(Offsets are into the `0x8f` payload: `[0:8]` device id, then the 15-byte header, so byte10 is
+header offset 2 and byte12 is header offset 4.)
+
+The same two values appear in the `0xd9` announce packet, which embeds the identical header:
+
+```
+right  ...0143858a3ac372bd 0111 01 13 08 000000...
+left   ...37b8c4d954a7596e 0111 00 13 09 000000...
+```
+
+So a decoder can label a controller from the first packet it sees, with no pairing dialogue and no
+Meta code. **`byte10` is the better candidate** — it is boolean (1 = right, 0 = left), whereas
+`byte12` (8 vs 9) looks more like a pairing slot or radio index.
+
+**What this does not establish.** With exactly one pair of controllers, "handedness flag" and
+"per-device constant that happens to correlate" are indistinguishable. `byte10` could equally be a
+pairing-slot parity. The device id itself shows no obvious handedness pattern
+(`01 43 85 8a 3a c3 72 bd` vs `37 b8 c4 d9 54 a7 59 6e`).
+
+Falsifiable test, if it ever matters: **unpair and re-pair the controllers in the opposite order**.
+If `byte10` follows the physical controller it is handedness; if it follows the pairing order it is
+a slot index and the real handedness signal is elsewhere. A second pair of controllers would settle
+it just as well.
