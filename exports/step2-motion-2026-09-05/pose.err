@@ -1,0 +1,3 @@
+[+] trackingservice pid=26067  TrackingServiceHeadTracker @ 0x7addb32000 (8192 B)
+[+] nslots=2 stride=0xa0
+[+] 6000 samples in 100.00 s (60.0 Hz), 6000 distinct seq (60.0 Hz new poses), 0 read errors

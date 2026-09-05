@@ -1,0 +1,12 @@
+[+] open /dev/syncboss_stream0 -> fd 3  (HAL still holds its own fd)
+
+[stream] 4435276 bytes, 112001 packets in 100.0s (43.3 KB/s), 0 resync bytes
+[stream] first byte arrived 0.000 s after open
+
+type      count  rate(Hz)  payload len(s)     first payload
+0x50     99362     993.6  36                 10af26420600000000a060bf0000e03d0000003bfff1a8c1...
+0x51      2957      29.6  22                 9cca26420600000004ceb338c3297a36a28b02387c17
+0x55      7182      71.8  12                 37de264206000000e3191a00
+0xe0      2500      25.0  14                 007cc22642060000003925090009
+
+[=] VERDICT: second reader OPENED and RECEIVED data -- single-open assumption is FALSE
