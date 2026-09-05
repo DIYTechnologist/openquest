@@ -1,0 +1,8 @@
+{
+  "device_chipset":"msm8998",
+  "device_default_refresh_rate":"72.0",
+  "device_gpu":"ADRENO_540",
+  "device_region":"US",
+  "device_support_sdcard":"true",
+  "device_support_sdcard_path":"/sdcard"
+}
