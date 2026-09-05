@@ -2,7 +2,7 @@
 # sb_decode.py — parse a /dev/syncboss_stream0 capture into Basalt/EuRoC inputs.
 #   type 0x50 (len36) IMU @1kHz: {u32 ts_us, u32 id, f32 accel[3](g), f32 gyro[3](deg/s), f32 temp}
 #   type 0x51 (len22) FIXED ~29.6 Hz MCU tick -- NOT camera exposure (notes/45); 0xe0 is the
-#                     exposure stamp. 0x51 continues at 29.6 Hz with the cameras idle.: {u32 ts_us, ...}
+#                     exposure stamp. 0x51 continues at 29.6 Hz with the cameras idle.
 # Both timestamps are the nRF 1 MHz clock (hardware-synced). Emits ns timestamps.
 import sys, struct, re, math, os
 

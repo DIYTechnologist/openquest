@@ -72,3 +72,30 @@ perishable list.
 | panel timing documented | **partly** — 72 Hz, rolling shutter, bottom-to-top scanout, front-buffer swap table (`notes/32`); vsync/persistence not yet measured |
 | distortion reproduced to a stated pixel error | **source decoded and parsed**; conversion is mechanical, error figure still needs a comparison render |
 | motion-to-photon measured | not started; `SWAP_TIMING_*` gives the model to check against |
+
+## Converter: `tools/display/mesh_to_monado.py` (added 2026-09-05)
+
+Emits a C header with the grid baked in plus a bilinear sampler whose body matches Monado's
+`u_distortion_mesh` callback shape (normalised u,v over the render target -> one UV per colour
+channel), so a driver can call it directly. Compiles clean and passes a bounds/corner test.
+
+Two checks pass that were not designed for, and both are physical rather than structural:
+
+```
+eye0 (0.5,0.5) -> G(0.5874, 0.5816)     eye1 (0.5,0.5) -> G(0.4126, 0.5816)
+                  0.5874 + 0.4126 = 1.0000 exactly -> the eyes are exact mirrors
+
+chromatic offset |B-G|:  centre 0.00000   edge 0.00097
+```
+
+Chromatic offset is **zero at the centre and grows toward the edges** — which is exactly how lateral
+chromatic aberration behaves, and is not something the normalisation could have manufactured. The
+green channel sets the extent so R and B keep their *relative* offsets rather than each being
+stretched to fill [0,1], which would have destroyed the correction.
+
+**Metrically provisional.** Normalisation uses the mesh's own min/max extent, which is right if the
+grid uniformly samples the render target (its 100 % monotonicity in both axes supports that) and
+wrong if the sampling is non-uniform in a way not yet characterised. The topology and the chromatic
+offsets are certainly correct; the absolute mapping to field angles still needs the comparison
+render against the stock compositor — which is the remaining half of 6A task 3 and stays on the
+perishable list.
