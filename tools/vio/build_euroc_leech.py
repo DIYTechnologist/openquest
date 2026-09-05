@@ -24,6 +24,16 @@ Three things this has to get right, all of them learned the hard way:
 IMU comes from the sb_leech raw stream: type 0x50, {u32 ts_us (1 MHz nRF clock), u32 id,
 f32 accel[3] g, f32 gyro[3] deg/s, f32 temp}, converted to EuRoC's rad/s and m/s^2.
 
+**IMU RECTIFICATION IS MANDATORY** (notes/14, and re-learned the hard way here). The syncboss FIFO
+delivers RAW sensor-frame samples. The factory calibration carries a per-sensor RectificationMatrix
+mapping raw axes into the IMU *body* frame, and it is very nearly a 180 deg rotation: body ~
+(-y, -x, -z) of raw. Every camera->IMU extrinsic is expressed in that body frame, so feeding raw
+samples puts the IMU and cameras ~180 deg apart. Nothing static catches it -- gyro and accel stay
+mutually consistent, the accelerometer still reads a clean 1 g at rest -- but every visual update
+becomes inconsistent with propagation, triangulation fails, chi2 rejects the survivors and the
+filter silently dead-reckons. Measured previously: 101 deg median axis error raw vs 9 deg rectified,
+and it accounted for ~600 m of drift. Convention is Rect @ (raw - Offset).
+
 NOTE ON CLOCKS: frame stamps are CLOCK_MONOTONIC (from the FrameSet descriptor) while IMU stamps
 are the nRF 1 MHz clock. They are NOT the same timebase. The offset is recovered by correlation
 (notes/31 measured r=0.997 at ~0.07 s) and applied with --imu-offset-ns; without it the dataset is
@@ -33,6 +43,7 @@ Usage: build_euroc_leech.py <frames.bin> <frames.idx> <imu.bin> <out_dir> [--par
                             [--camA 0] [--camB 2] [--imu-offset-ns N] [--pair-tol-ms 8]
 """
 import argparse
+import json
 import math
 import os
 import struct
@@ -66,7 +77,16 @@ def load_index(path):
     return rows, uniq
 
 
-def load_imu(path, offset_ns):
+def load_rect(calib_path):
+    """-> (R_gyro, off_gyro, R_accel, off_accel) from the factory intermediate.json."""
+    c = json.load(open(calib_path))['imu']
+    return (np.array(c['gyroscope']['RectificationMatrix'], float).reshape(3, 3),
+            np.array(c['gyroscope']['Offset']['ConstantOffset'], float),
+            np.array(c['accelerometer']['RectificationMatrix'], float).reshape(3, 3),
+            np.array(c['accelerometer']['Offset']['OffsetAtZeroDegC'], float))
+
+
+def load_imu(path, offset_ns, rect=None):
     d = open(path, 'rb').read()
     i, out = 0, []
     while i + 6 <= len(d):
@@ -79,7 +99,19 @@ def load_imu(path, offset_ns):
         if t == 0x50 and L == 36:
             ts, _ = struct.unpack('<II', d[i+6:i+14])
             ax, ay, az, gx, gy, gz, _tp = struct.unpack('<7f', d[i+14:i+42])
-            out.append((ts * 1000 + offset_ns, gx*DEG, gy*DEG, gz*DEG, ax*G, ay*G, az*G))
+            # UNITS: the stream is deg/s and g; the calibration Offsets are SI (rad/s and m/s^2).
+            # Convert to SI FIRST, then Rect @ (x - Offset). Measured on the still window of the
+            # 2026-09-05 capture, this is not a cosmetic choice:
+            #   SI-first          |gyro| 0.00772 rad/s   <- correct
+            #   offset in deg/s   |gyro| 0.06105         <- barely better than no offset
+            #   no offset         |gyro| 0.06214
+            gv = np.array([gx, gy, gz]) * DEG
+            av = np.array([ax, ay, az]) * G
+            if rect is not None:
+                Rg, og, Ra, oa = rect
+                gv = Rg @ (gv - og)
+                av = Ra @ (av - oa)
+            out.append((ts * 1000 + offset_ns, gv[0], gv[1], gv[2], av[0], av[1], av[2]))
         i += 6 + L
     return out
 
@@ -92,6 +124,8 @@ def main():
     ap.add_argument('--camB', type=int, default=2)
     ap.add_argument('--imu-offset-ns', type=int, default=0)
     ap.add_argument('--pair-tol-ms', type=float, default=8.0)
+    ap.add_argument('--calib', default='exports/calibration-2026-08-30/openvr_calib_out/intermediate.json',
+                    help='factory intermediate.json for IMU rectification; --calib none disables')
     a = ap.parse_args()
 
     rows, uniq = load_index(a.index)
@@ -141,7 +175,9 @@ def main():
             csv.write(f'{ts},{ts}.png\n')
     csv0.close(); csv1.close()
 
-    imu = load_imu(a.imu, a.imu_offset_ns)
+    rect = None if a.calib == 'none' else load_rect(a.calib)
+    print('IMU rectification: ' + ('ON  (Rect @ (raw - Offset))' if rect is not None else 'OFF'))
+    imu = load_imu(a.imu, a.imu_offset_ns, rect)
     with open(os.path.join(a.out, 'mav0/imu0/data.csv'), 'w') as f:
         f.write('#timestamp [ns],w_x,w_y,w_z,a_x,a_y,a_z\n')
         for t, gx, gy, gz, ax, ay, az in imu:

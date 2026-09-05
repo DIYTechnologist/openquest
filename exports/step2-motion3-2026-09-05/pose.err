@@ -1,0 +1,3 @@
+[+] trackingservice pid=2313  TrackingServiceHeadTracker @ 0x7b051fb000 (8192 B)
+[+] nslots=2 stride=0xa0
+[+] 6900 samples in 115.00 s (60.0 Hz), 6900 distinct seq (60.0 Hz new poses), 0 read errors
