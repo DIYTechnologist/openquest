@@ -71,3 +71,66 @@ diff the datasets, since one converges and one does not on the same camera pair 
 
 No ATE, no drift rate, no RPE. The number does not exist yet and nothing here should be read as
 progress toward it beyond ruling causes out.
+
+## Controlled diff against the converged run (added later, 2026-09-05)
+
+`notes/22` reached 0.203 m. Its config is preserved in `exports/vio-b2-2026-09-04/ovconfig/`, so the
+estimator side can be compared directly rather than guessed at.
+
+**All three config files are now byte-identical to that run.** Two real differences were found and
+removed — `downsample_cameras` was `true` in mine (halving image resolution) and
+`max_slam_in_update` was 12 vs 25 — and the `kalibr_imucam_chain.yaml` and `kalibr_imu_chain.yaml`
+were **already identical**, which rules out the calibration and the camera-IMU extrinsic *as
+transcribed*. Result with the converged config: **7562 m**, essentially unchanged from 7267 m.
+
+So the difference is in the data, not the configuration.
+
+### The failure signature is dead reckoning, from the start
+
+```
+estimated speed: median 113 m/s, p90 207, max 1108
+Meta's measured speed on the same capture: ~1-2 m/s
+```
+
+Integrating an unremoved 1 g for ~10 s gives ~98 m/s, which is the order of what is observed. And
+trimming the dataset to 25 s of motion gives 956 m over 668 poses against 7562 m over 1810 — drift
+scaling with **time**, not with motion aggressiveness. Both point at the filter propagating on IMU
+alone with visual updates rejected, which is exactly what `notes/13` predicted a bad camera-IMU
+rotation would produce.
+
+### But the two captures are not comparable trajectories
+
+Worth recording, because it changes what `notes/22`'s number means:
+
+```
+b2 (0.203 m)   |gyro| median 0.041 rad/s   54 s still + 21 s gentle, path 7.24 m, max excursion 0.62 m
+leech (7562 m) |gyro| median 0.962 rad/s   35 s still + 80 s walking, path 64.5 m, box 6.6 x 7.2 m
+```
+
+23x the rotation rate and 9x the path. **`notes/22`'s 0.203 m was a desk-scale wiggle**, not
+evidence the pipeline survives room-scale walking. That is not a criticism of the number, which was
+honestly reported against a `< 2 m` criterion — but it should not be read as validation for this
+regime.
+
+### The camera-IMU rotation is still the prime suspect, and NOT yet measured
+
+It is the one link neither check covers: the epipolar test is camera-to-camera only, and the
+gyro-vs-Meta test is IMU-only. An attempt to measure it here — estimating camera angular velocity
+from optical flow between consecutive frames and comparing against the rotated gyro — produced
+143 / 138 / 88 deg median axis error across the candidate conventions, which would be damning
+except that the measurement itself does not validate:
+
+```
+|w_cam| median 1.789 rad/s   |w_imu| median 1.396 rad/s
+magnitude ratio 1.306        magnitude correlation r = +0.518
+```
+
+A ratio of 1.31 and r of 0.52 mean the image-derived rotation is not measuring rotation cleanly. The
+cause is the capture itself: walking through a room produces large translation parallax, and a
+rotation-only fit to bearing vectors absorbs that as spurious rotation. `check_imu_cam_extrinsic.py`
+assumes a distant scene for exactly this reason.
+
+**So no conclusion is drawn about the extrinsic.** The right test needs either a rotation-dominant
+segment (pivot in place, little translation) or a translation-robust estimator (essential matrix,
+keeping only the rotation). That is offline work on data already captured — the stationary-to-motion
+transition at t=35 s may contain a usable rotation-dominant window.
