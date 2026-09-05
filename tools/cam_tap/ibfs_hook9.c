@@ -114,37 +114,45 @@ int mq_read(void* thiz, void* out, unsigned long cnt){
   if(access(GO,F_OK)!=0) return r;
   if(__sync_fetch_and_add(&g_frames,0)>=g_max) return r;
 
-  for(int i=0;i<g_n;i++){
-    int k=(int)g_e[i].k;
-    if(k!=g_cama && k!=g_camb) continue;
-    uint32_t hh=hashof(g_e[i].va,g_e[i].size);
-    if(!hh || hh==g_e[i].hash) continue;
-    g_e[i].hash=hh;
-    // The pixel hash says a buffer's content moved, but it fires more than once per frame because
-    // we can sample a buffer mid-write (measured: cam0=543 vs cam2=711 over the same 20 s, where a
-    // 30 Hz stereo pair must be equal). The descriptor's capture timestamp is authoritative and
-    // changes exactly once per frame, so use it to dedupe.
+  // Descriptor-driven capture. Measured: the entry's id equals this camera's own block index in
+  // 1185 of 1188 frames (the 3 misses are warmup, before ids settle), so the descriptor identifies
+  // the buffer directly. Driving off it instead of a pixel hash removes both earlier defects at
+  // once: no mid-write double-fire, and no dependence on scene content -- a hash on a static scene
+  // simply does not change, which is why a 25 s desk run yielded only 9 s of frames.
+  int cams[2]={g_cama,g_camb};
+  for(int c=0;c<2;c++){
+    int k=cams[c];
+    if(k<0||k>3) continue;
     uint64_t cts=w[2+12*k+11];
+    uint64_t bidx=w[2+12*k]>>32;
     int dup=0;
     for(int q=0;q<NSEEN;q++) if(g_seen[k][q]==cts){ dup=1; break; }
     if(dup) continue;
+    int e=-1;
+    for(int i=0;i<g_n;i++) if(g_e[i].k==(uint32_t)k && g_e[i].id==(uint32_t)bidx){ e=i; break; }
+    if(e<0) continue;
     g_seen[k][g_seenq[k]]=cts; g_seenq[k]=(g_seenq[k]+1)%NSEEN;
     int fno=__sync_fetch_and_add(&g_frames,1);
     if(fno>=g_max) break;
-    // The descriptor block for this camera carries its own capture time (notes/34): block k at
-    // word 2+12k, field +11. This is the real exposure timestamp, not when we happened to read it.
-    uint64_t cap_ns = cts;
-    uint64_t off=__sync_fetch_and_add(&g_off,(uint64_t)g_e[i].size);
+    uint64_t off=__sync_fetch_and_add(&g_off,(uint64_t)g_e[e].size);
     size_t done=0;
-    while(done<g_e[i].size){
-      ssize_t n=pwrite(g_blobfd,(const void*)(uintptr_t)(g_e[i].va+done),g_e[i].size-done,(off_t)(off+done));
+    while(done<g_e[e].size){
+      ssize_t n=pwrite(g_blobfd,(const void*)(uintptr_t)(g_e[e].va+done),g_e[e].size-done,(off_t)(off+done));
       if(n<=0) break;
       done+=(size_t)n;
     }
-    char ix[192];
-    int nn=snprintf(ix,sizeof ix,"%d %d %llu %llu %llu %u\n",
-      fno,k,(unsigned long long)cap_ns,(unsigned long long)mono_ns(),
-      (unsigned long long)off,g_e[i].size);
+    // Exposure and gain come from this camera's own descriptor block (+7, +8 as f64). They are
+    // recorded per frame because the stream is NOT one 50 Hz camera: it is two interleaved 25 Hz
+    // streams at different exposures, 40 ms apart, offset ~17.8 ms. Measured means 73.2 vs 40.8 on
+    // a static scene, with consecutive frames differing by 32.5 and same-parity frames by 2.0-3.5.
+    // A VIO dataset must use ONE exposure class; mixing them is what a naive 50 Hz read would do.
+    double expo, gain;
+    memcpy(&expo,&w[2+12*k+7],8);
+    memcpy(&gain,&w[2+12*k+8],8);
+    char ix[256];
+    int nn=snprintf(ix,sizeof ix,"%d %d %llu %llu %llu %u %u %llu %.9f %.4f\n",
+      fno,k,(unsigned long long)cts,(unsigned long long)mono_ns(),
+      (unsigned long long)off,g_e[e].size,g_e[e].id,(unsigned long long)bidx,expo,gain);
     if(g_idxfd>=0){ if(write(g_idxfd,ix,nn)){} }
   }
   return r;
