@@ -154,7 +154,11 @@ own `/dev/syncboss_stream0`.
 - [ ] Every button/trigger/thumbstick decoded from the raw stream matches Meta's reported state
       **100 %** over ≥ 50 discrete events
 - [ ] Controller IMU decoded, with rate and units confirmed against Meta's reported values
-- [ ] **Documented answer** to where 6DoF controller pose is computed (the key architectural unknown)
+- [x] **Documented answer** to where 6DoF controller pose is computed — **not on the MCU**: the
+      full raw stream, captured while both controllers were actively moved, contains no packet
+      type and no sub-record with the shape of a pose (`notes/50`). Fusion location within
+      `trackingservice` vs. camera-based constellation tracking remains open; the kill criterion
+      below is now the live scenario for full 6DoF.
 - [ ] If camera-based: quantified — how many IR blobs per frame in the short-exposure frames we
       currently discard
 

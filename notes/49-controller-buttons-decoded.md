@@ -70,7 +70,7 @@ UP (+93 deg), DOWN (-66 deg), LEFT (-163 deg), RIGHT (+2 deg) — the pressed or
 | every button decoded from the raw stream | **right controller: done** — 6 digital/analogue + 2 stick axes |
 | matches Meta's reported state 100 % over >= 50 events | **not as written** — see below |
 | controller IMU decoded, rate and units confirmed | done (`notes/27`, 501 Hz) |
-| where 6DoF controller pose is computed | still open |
+| where 6DoF controller pose is computed | **not on the MCU** (`notes/50`); fusion location within `trackingservice` vs constellation tracking still open |
 
 The "matches Meta 100 %" criterion cannot be scored as written, because Meta's reference is 2.7 s
 per call. What was done instead is stronger in one respect and weaker in another: **90 events with
