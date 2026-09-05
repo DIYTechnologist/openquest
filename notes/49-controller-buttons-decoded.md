@@ -159,3 +159,28 @@ Falsifiable test, if it ever matters: **unpair and re-pair the controllers in th
 If `byte10` follows the physical controller it is handedness; if it follows the pairing order it is
 a slot index and the real handedness signal is elsewhere. A second pair of controllers would settle
 it just as well.
+
+## Decoder: `tools/controller/ctl_decode.py`
+
+Reference implementation, no Meta code. Parses the container, derives handedness **from the packet
+rather than the device id**, and emits normalised controls:
+
+- trigger / grip -> 0.0 released .. 1.0 pressed (the raw 12-bit fields are inverted)
+- thumbstick -> +/-1.0
+- face buttons labelled A/B or X/Y according to derived handedness
+
+**Why handedness must be derived:** device ids are per-unit. The ids on this headset will not be the
+ids on anyone else's, so a released decoder cannot key off them — it has to read the role off the
+wire. `HAND_FIELD` selects `byte10` (boolean, 1 = right) with `byte12` (8/9, likely a pairing slot)
+documented in the source as the fallback if a user ever reports swapped hands.
+
+Validated against both captures with a proper edge-detector:
+
+```
+right capture:  right  A=9  B=9  STICK=9  SPECIAL=9      36 presses
+left  capture:  left   X=9  Y=9  STICK=9  SPECIAL=9      36 presses
+```
+
+Exactly 9 per button in both, which also **retires the 8-and-7 counts reported above** — those came
+from segmenting on a 0.15 s time gap, which merged adjacent presses. Edge detection on the button
+bit gives 9 everywhere. The analysis was wrong, not the data.
