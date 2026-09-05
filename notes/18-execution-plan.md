@@ -16,7 +16,7 @@ marked ⚠; per the standing rules, prompt and wait for "go".
 |---|---|---|---|---|
 | 0 | Open VIO converges | **DONE** | drift on 23 s capture | 0.56 m |
 | 1 | Direct-kernel camera (B2) | **DONE** — 5/5 (`notes/22`), final ‖p‖ 0.203 m | Meta libs needed by capture | **0** |
-| 2 | Ground truth vs Meta | poses+IMU **captured & cross-validated r=0.997**; frames blocked by the ImageBuffer **pool** (`notes/31`) | ATE RMSE vs Meta poses | unknown |
+| 2 | Ground truth vs Meta | **first ATE delivered**: 7.6 cm RMSE (in-place motion, not room-scale); root cause of prior divergence was a camera-timestamp bug, not the extrinsic (`notes/51`) | ATE RMSE vs Meta poses | **7.6 cm** (in-place); room-scale still divergent |
 | 3 | Controllers | **stream found**: enable=213, data=0x8f, IMU decoded @501 Hz (`notes/27`) | button decode agreement | 0 % (needs presses) |
 | 4 | `trackingservice` in place | **task 1 DONE** — pose injection works (`notes/23`) | Meta shell on our poses | pose accepted, compositor unverified |
 | 5 | OS swap | not started | boots + tracks + streams | no |
@@ -117,14 +117,20 @@ Options, in order of preference:
 **Acceptance criteria**
 - [x] Meta poses logged at ≥ 30 Hz for ≥ 120 s with < 1 % dropped samples — **59.97 Hz for
       125 s, 0.067 % late, 0 read errors** via `tools/pose_log/` (`notes/28`)
-- [ ] Our VIO runs on frames captured **in the same session** as those poses
-- [ ] **ATE RMSE reported** with a stated alignment method (this is the deliverable — a number, not
-      a threshold to pass)
-- [ ] **Drift rate in m/min** over ≥ 2 minutes — currently completely unknown
-- [ ] Relative pose error over 1 s windows, to separate local accuracy from slow drift
+- [x] Our VIO runs on frames captured **in the same session** as those poses — done, blocked for
+      most of the session on a ~100-250 ms camera-timestamp bug, found and fixed (`notes/51`)
+- [x] **ATE RMSE reported** with a stated alignment method — **7.6 cm** (Sim3/Umeyama, EuRoC-style),
+      **but on in-place rotation + gentle motion, not room-scale walking** (`notes/51`) — the same
+      caveat that applies to step 1's 0.203 m
+- [x] **Drift rate in m/min** — **0.054 m/min**, over an 84 s window (short; treat as indicative)
+- [x] Relative pose error over 1 s windows — **RMSE 0.110 m, median 0.090 m**
+
+**Not yet met:** a room-scale number. The walking capture improved 2-2.7x with the same timing fix
+but still drifts thousands of metres — a real, separate, unresolved problem (`notes/51`).
 
 **Kill criteria.** If the leech cannot link ≥ 20 % of frames cleanly, drop to option 2 and label the
-result as indicative only.
+result as indicative only. (Moot — the leech links frames fine; the room-scale gap is accuracy, not
+linkage.)
 
 **Needs headset:** ⚠ yes, worn, ~2 min.
 

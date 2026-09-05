@@ -17,6 +17,22 @@ Three things this has to get right, all of them learned the hard way:
    it would show up only as a poor ATE, which is near-impossible to diagnose after the fact.
    Parity 1 is the brighter, scene-adapting stream (exp*gain 0.099 vs 0.053) and is the default.
 
+4. **Shift frame timestamps by a fixed CAM_SHIFT_NS.** The FrameSet descriptor's capture timestamp
+   (notes/34) is NOT the true capture time on the same clock as the IMU/Meta-pose correlation used
+   for --imu-offset-ns. Measured by comparing camera-derived roll (optical-axis rotation from
+   consecutive-frame affine fits, immune to translation) against the calibrated, rotated gyro
+   (notes/48's check_imu_cam_extrinsic.py, run on two INDEPENDENT capture windows): peak correlation
+   r=0.893 (rotation-dominant window) and r=0.776 (gentle-motion window) both land at the SAME lag,
+   -254 ms and -242 ms respectively. The frame timestamp is EARLY relative to true capture by
+   ~250 ms; default CAM_SHIFT_NS=254_000_000 corrects it. This is the same phenomenon
+   build_euroc_direct.py's CAM_SHIFT_MS handles for the direct-kernel path (there, 816 ms) -- a
+   different pipeline with different fixed latency, same underlying cause: this device's frame
+   delivery has substantial latency relative to IMU/pose reporting that must be compensated
+   explicitly. It is NOT visible in any static check: gyro and accel stay self-consistent, and only
+   the camera<->IMU time relationship is broken -- which was mistaken for a possible camera<->IMU
+   ROTATION problem before the lag sweep resolved it (the R^T extrinsic convention is in fact
+   correct, r jumps from ~0.1 to ~0.89 once timing is fixed rather than the rotation).
+
 3. **Give a stereo pair identical timestamps.** EuRoC pairs frames by exact timestamp match, so the
    two cameras' capture times (which differ by a few ms) are unified onto cam A's value after
    nearest-neighbour pairing.
@@ -124,12 +140,18 @@ def main():
     ap.add_argument('--camB', type=int, default=2)
     ap.add_argument('--imu-offset-ns', type=int, default=0)
     ap.add_argument('--pair-tol-ms', type=float, default=8.0)
+    ap.add_argument('--cam-shift-ns', type=int, default=254_000_000,
+                    help='fixed correction added to every frame timestamp; see notes/51')
     ap.add_argument('--calib', default='exports/calibration-2026-08-30/openvr_calib_out/intermediate.json',
                     help='factory intermediate.json for IMU rectification; --calib none disables')
     a = ap.parse_args()
 
     rows, uniq = load_index(a.index)
     print(f"index rows {len(rows)} -> unique (cam,ts) {len(uniq)}")
+
+    print(f'camera timestamp shift: {a.cam_shift_ns/1e6:+.1f} ms')
+    for r in uniq:
+        r["ts"] += a.cam_shift_ns
 
     sel = {}
     for cam in (a.camA, a.camB):
