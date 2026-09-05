@@ -79,3 +79,47 @@ by Meta's agreement. It establishes the decode; it does not cross-check against 
 interpretation.
 
 Left controller not yet captured. Expected to differ only in which id is active, with B->Y and A->X.
+
+## Left controller — same encoding, confirmed independently
+
+Second capture, left controller only. Notably **only one device streamed** (`37b8c4d954a7596e`) —
+the right had gone to sleep on the desk — which independently confirms the handedness assignment
+made in the first capture from which id's fields varied.
+
+```
+0x63 axis A   0.8 -  8.4 s    Trigger
+0x63 axis B   8.8 - 17.2 s    Grip
+0x24 bit 0x02  first 18.5 s   Y     <- same bit as the right controller's B
+0x24 bit 0x01  first 28.8 s   X     <- same bit as the right controller's A
+0x24 bit 0x04  first 37.6 s   stick click
+0x82          45.5 - 47.5 s   UP (+70 deg), DOWN (-118), LEFT (+164), RIGHT (-15)  in order
+0x24 bit 0x08  first 50.5 s   Special (menu)
+```
+
+**The bit assignment is identical across controllers.** `0x01` and `0x02` are the primary and
+secondary face buttons; whether they read as A/B or X/Y is purely handedness, so a decoder needs the
+device id to label them, not a different field layout.
+
+Press-count check: bits `0x04` and `0x08` give a clean 9; bits `0x01` and `0x02` give 8 and 7,
+because two adjacent presses fell inside the 0.15 s segmentation gap (visible as a single 0.35 s and
+0.53 s press where two short ones were expected). That is a threshold artefact in the analysis, not
+a decode failure — the 3-short / 3-long / 3-short structure is unambiguous in all four.
+
+## Both controllers: final map
+
+| control | field | encoding |
+|---|---|---|
+| Trigger | `0x63` axis A | 12-bit, `0xFFF` released -> `0` pressed |
+| Grip | `0x63` axis B | 12-bit, same |
+| A / X (primary) | `0x24` | bit `0x01` |
+| B / Y (secondary) | `0x24` | bit `0x02` |
+| Stick click | `0x24` | bit `0x04` |
+| Special / menu | `0x24` | bit `0x08` |
+| Thumbstick X/Y | `0x82` | 2 x int16, +/-32000 |
+| Controller IMU | `0x41 0x82` | 501 Hz (`notes/27`) |
+| device id | payload `[0:8]` | `0143858a3ac372bd` right, `37b8c4d954a7596e` left |
+
+Every control on both controllers is now decoded from the raw MCU stream with **no Meta userspace
+code**. What remains for step 3 is the architectural question `notes/18` flagged as the real risk:
+**where 6DoF controller pose is computed** — MCU, `trackingservice`, or camera IR blobs. Nothing in
+`0x8f` looks like a pose, which is evidence against the MCU but not proof.
