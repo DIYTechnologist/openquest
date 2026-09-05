@@ -69,8 +69,8 @@ perishable list.
 
 | criterion | state |
 |---|---|
-| panel timing documented | **partly** — 72 Hz, rolling shutter, bottom-to-top scanout, front-buffer swap table (`notes/32`); vsync/persistence not yet measured |
-| distortion reproduced to a stated pixel error | **source decoded and parsed**; conversion is mechanical, error figure still needs a comparison render |
+| panel timing documented | **done** — superseded by `notes/44`: 71.819 Hz measured (sd 3.4 us), video mode, dual DSI, 13.718 ms bottom-to-top scanout, 0.206 ms vblank |
+| distortion reproduced to a stated pixel error | **decoded, parsed and converted** (`mesh_to_monado.py`); error figure still needs a comparison render |
 | motion-to-photon measured | not started; `SWAP_TIMING_*` gives the model to check against |
 
 ## Converter: `tools/display/mesh_to_monado.py` (added 2026-09-05)
