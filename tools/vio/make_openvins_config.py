@@ -15,6 +15,10 @@ Usage: make_openvins_config.py <basalt_calibration.json> <camA> <camB> <out_dir>
 import json, math, os, sys
 import numpy as np
 
+# OV_DYN_INIT=1 switches the whole initialisation block to dynamic init (see the comments on
+# 'init_dyn_use' below). It is one coherent set of five parameters, not an independent knob each.
+DYN = os.environ.get('OV_DYN_INIT', '0') not in ('0', '', 'false')
+
 
 def quat_to_R(d):
     q = np.array([d['qx'], d['qy'], d['qz'], d['qw']], float)
@@ -98,8 +102,9 @@ def main(calib, a, b, out_dir, template_dir):
         # Dynamic init samples init_dyn_num_pose poses across this window and needs each feature seen in
         # several of them. Over 1 s the sampled poses are far enough apart that most features span
         # only ~2, leaving measurements just short of the state size. A shorter window packs the
-        # poses closer together.
-        'init_window_time': 'init_window_time: 1.0',
+        # poses closer together. With dynamic init actually enabled (OV_DYN_INIT=1) the opposite is
+        # true -- 1 s does not observe enough parallax and the recovery is degenerate; see notes/53.
+        'init_window_time': 'init_window_time: %s' % ('3.0' if DYN else '1.0'),
         'init_max_features': 'init_max_features: 100',
         # Accelerometer excitation needed to call the start of motion a "jerk". EuRoC's default
         # (1.5) and even 0.5 are tuned for a drone; a person stepping off from standing still only
@@ -126,17 +131,28 @@ def main(calib, a, b, out_dir, template_dir):
         # jerk into motion. A worn headset is already moving, so static init either never fires
         # ("no accel jerk detected") or -- worse -- fires mid-motion and initialises with zero
         # velocity and gravity aligned to an accelerometer reading that includes real acceleration.
-        # That mis-initialisation is consistent with the large drift we saw. Use dynamic init.
-        'init_dyn_use': 'init_dyn_use: false',
+        # notes/53 CONFIRMED that prediction: it is what destroyed the room-scale walking capture,
+        # which static init entered at the instant of motion onset and then dead-reckoned 3.9 km.
+        # Dynamic init fixes it (11.7 cm ATE on the same data) -- but ONLY with the MLE refinement
+        # below, and it REGRESSES a capture that does have a good still window, because it wins the
+        # race against static init and is degenerate without excitation. So: default off, and turn
+        # it on for captures with no stationary, well-textured window. See notes/53.
+        'init_dyn_use': 'init_dyn_use: %s' % ('true' if DYN else 'false'),
         # Dynamic init also requires a minimum orientation change across the window; 10 deg is more
         # than a gentle look-around produces in 1 s.
         'init_dyn_min_deg': 'init_dyn_min_deg: 1.5',
         # Dynamic init solves a least-squares problem over the window; with the default 50 features
         # it ends up with fewer measurements than state parameters ("not enough feature
         # measurements: 374 meas vs 393 state size"). More features fixes that.
-        # The Ceres refinement reports "Residual and Jacobian evaluation failed"; the linear
-        # solution alone is sufficient to bootstrap, and the config documents 0 as "skip the MLE".
-        'init_dyn_mle_max_iter': 'init_dyn_mle_max_iter: 0',
+        # An earlier session set this to 0 ("skip the MLE") because Ceres reported "Residual and
+        # Jacobian evaluation failed", and concluded the linear solution alone would bootstrap. It
+        # does not: without the refinement the linear recovery is singular ("covariance recovery
+        # failed" x1306, |v| coming back as 0.0001 m/s) and init never fires at all. Restoring the
+        # refinement is precisely what makes dynamic init work. See notes/53.
+        'init_dyn_mle_max_iter': 'init_dyn_mle_max_iter: %s' % ('50' if DYN else '0'),
+        'init_dyn_mle_max_time': 'init_dyn_mle_max_time: %s' % ('1.0' if DYN else '0.05'),
+        'init_dyn_num_pose': 'init_dyn_num_pose: %s' % ('8' if DYN else '6'),
+        'init_dyn_min_rec_cond': 'init_dyn_min_rec_cond: %s' % ('1e-15' if DYN else '1e-12'),
     }
     out_lines = []
     for ln in lines:

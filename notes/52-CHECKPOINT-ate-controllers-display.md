@@ -1,7 +1,12 @@
 # CHECKPOINT — first ATE, controllers decoded, display characterised — 2026-09-06
 
-Read this first on resume. Supersedes the "next steps" of `notes/24`; the standing rules and traps
-in `notes/10` and `notes/24` still hold, plus new ones below.
+Read this first on resume, **then `notes/53`**. Supersedes the "next steps" of `notes/24`; the
+standing rules and traps in `notes/10` and `notes/24` still hold, plus new ones below.
+
+> **Superseded in part by `notes/53` (same day).** "Immediate next step 1" below is **done**: the
+> walking capture's divergence was neither of the two candidates named there. It was OpenVINS's
+> static initialiser firing at motion onset. Step 2 now has its room-scale number — **11.7 cm ATE
+> over a 60.6 m walk, scale 1.011** — so step 2 is **DONE** and no longer gates steps 5 and 6B.
 
 **Project goal:** replace Meta's blobs on an EOL Quest 1 (`monterey`, msm8998) with an open VR
 stack, so the device can run a modern OS and general APKs (ALVR/SteamVR). Strategy (`notes/17`,
@@ -16,7 +21,7 @@ stack, so the device can run a modern OS and general APKs (ALVR/SteamVR). Strate
 |---|---|---|
 | 0 / X | VIO converges; real-time budget | **DONE** (`notes/14`, `notes/20`) |
 | 1 | Direct-kernel camera (B2) | **DONE** — 5/5 (`notes/22`), but see the caveat below |
-| 2 | Ground truth vs Meta | **first ATE delivered: 7.6 cm RMSE** (in-place motion). **Room-scale still diverges** (`notes/51`) |
+| 2 | Ground truth vs Meta | **DONE** — 7.6 cm in-place (`notes/51`) and **11.7 cm room-scale over a 60.6 m walk** (`notes/53`) |
 | 3 | Controllers | **input DONE** — every control, both controllers (`notes/49`). 6DoF pose: **not on the MCU** (`notes/50`), fusion location open |
 | 4 | `trackingservice` in place | injection proven (`notes/23`); motion-to-photon criterion still open |
 | 5 | OS swap | not started (gated on 2, 3, 6B) |
