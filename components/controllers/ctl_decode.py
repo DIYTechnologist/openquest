@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """ctl_decode.py — decode Quest 1 controller input from the raw SyncBoss stream.
 
-No Meta userspace code is involved. Input is a capture of /dev/syncboss_stream0 (see
-tools/sb_leech/), which any process can read passively — the device is a multi-reader broadcast
-fifo, not single-open (notes/30).
+No Meta userspace code is involved. Input is a capture of /dev/syncboss_stream0 (see sb_leech.c in
+this directory), which any process can read passively — the device is a multi-reader broadcast
+fifo, not single-open (research-notes/30).
 
-Framing (notes/27, offset corrected in notes/49):
+Framing (research-notes/27, offset corrected in research-notes/49):
 
     01 03 00 <type> 00 <len> <payload>          outer syncboss framing
     type 0x8f = controller, ~500 Hz per controller
