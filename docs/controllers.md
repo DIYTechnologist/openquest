@@ -7,13 +7,16 @@ stream, with no Meta userspace code. Replaces the controller half of
 ## Status
 
 Input decoding is done — every control on both controllers, matched against Meta's reported state
-(`research-notes/49`). **6DoF controller pose fusion is now understood, but not yet replaced.**
-Confirmed absent from the raw MCU stream (`research-notes/50`), and now confirmed and quantified as
-camera-based IR-LED constellation tracking, fused inside `trackingservice` itself
-(`research-notes/55`, from the service's own logging: ~15-18 blobs/frame detected, ~5 matched to
-the controller's known LED IDs, match success 0.95-1.00 when tracked). Implementing our own
-constellation tracker to replace it is unstarted and is its own project
-(`research-notes/18` step 3 kill criterion) — this component's actual scope is still 3DoF + buttons.
+(`research-notes/49`). **6DoF controller pose: a from-scratch v1 tracker exists and works,
+end to end, on real data** (`research-notes/56`) — not yet a product-quality replacement. Confirmed
+absent from the raw MCU stream (`research-notes/50`); confirmed and quantified as camera-based
+IR-LED constellation tracking fused inside `trackingservice` itself (`research-notes/55`). Since no
+LED geometry model exists or is extractable anywhere in this project, `tools/controller_tracking/`
+bootstraps one from our own stereo triangulation (no Meta data used) and tracks per-frame pose
+against it via brute-force correspondence search + PnP — validated self-consistent on a real
+capture, not yet validated for accuracy (needs a `TrackingServiceController` shared-memory reader,
+research-notes/56's open item, to get real per-frame ground truth). This tooling lives in `tools/`,
+not here, until it's proven — this component's own scope is still 3DoF + buttons.
 
 ## What it does
 
@@ -49,9 +52,10 @@ python3 components/controllers/ctl_decode.py ctl_capture.bin
 ## Known limits
 
 - No build step for `ctl_decode.py`/`ctl_run.sh` — pure Python/shell, run as-is.
-- 6DoF pose fusion does require camera-based constellation tracking (confirmed,
-  `research-notes/55`), so it is its own research project per `research-notes/18` step 3's kill
-  criterion, and this component's scope stays 3DoF + buttons until that project starts.
-- Getting `/dev/video0` free for any future work here (e.g. capturing the raw blob images, not just
-  trackingservice's summary stats) currently needs `trackingservice`/the sensors HAL stopped, and as
-  of `research-notes/55` those no longer reliably stay stopped — open, undiagnosed.
+- The v1 tracker (`tools/controller_tracking/`, `research-notes/56`) has no accuracy number yet, no
+  temporal/velocity consistency check (a wrong blob correspondence can still pass its reprojection
+  threshold and produce a physically impossible frame-to-frame jump — observed directly), and only
+  ran on a ~2.2 s capture window. It is not real-time and not on-device.
+- Getting `/dev/video0` free for a longer/cleaner capture currently needs `trackingservice`/the
+  sensors HAL stopped, and as of `research-notes/55` those no longer reliably stay stopped — open,
+  undiagnosed, hit again in `research-notes/56` via a different capture path.
