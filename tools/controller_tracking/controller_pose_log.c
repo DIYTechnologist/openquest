@@ -46,6 +46,7 @@
 #define IN_QUAT 0x10
 #define IN_POS  0x20
 #define MAX_SLOTS (REGION_SIZE / STRIDE + 1)
+#define MIN_RUN 15  // real ring has consistently been 30+ slots; false positives seen so far <= 7
 
 static volatile sig_atomic_t g_stop = 0;
 static void on_sig(int s) { (void)s; g_stop = 1; }
@@ -106,9 +107,6 @@ int main(int argc, char **argv) {
   fprintf(stderr, "[+] trackingservice pid=%d  %s @ 0x%llx (%llu B)\n", pid, REGION, base, region_size);
 
   unsigned char *buf = malloc(region_size);
-  if (pread(fd, buf, region_size, (off_t)base) != (ssize_t)region_size) {
-    fprintf(stderr, "[-] initial region read failed\n"); return 1;
-  }
 
   // Auto-detect: longest run of slot-stride-spaced candidates, where a candidate is a unit-norm
   // quaternion AND a plausible (nonzero, <2m) position at the same hypothetical slot start.
@@ -124,28 +122,64 @@ int main(int argc, char **argv) {
   //     EXACTLY 1.0 and occurs constantly in zero-initialized/padding memory, producing long,
   //     completely spurious "runs" of all-zero positions at the wrong phase. Requiring the
   //     position to also be nonzero and within a plausible hand-held range eliminates these.
-  char *is_cand = calloc((size_t)(region_size / 4) + 1, 1);  // indexed by byte-offset/4
-  for (unsigned long long s = 0; s + STRIDE <= region_size; s += 4) {
-    float q[4]; memcpy(q, buf + s + IN_QUAT, sizeof q);
-    double qn = q[0]*(double)q[0] + q[1]*(double)q[1] + q[2]*(double)q[2] + q[3]*(double)q[3];
-    if (!(qn > 0.99 && qn < 1.01)) continue;
-    float p[3]; memcpy(p, buf + s + IN_POS, sizeof p);
-    double pn = p[0]*(double)p[0] + p[1]*(double)p[1] + p[2]*(double)p[2];
-    if (pn < 1e-6 || pn > 4.0) continue;
-    is_cand[s / 4] = 1;
-  }
+  //
+  // A third, operational gotcha found running this for real: the ring only holds history while
+  // the controller is actively tracked, and gets sparse/empty again within a couple of seconds of
+  // it going idle. A capture script that starts this tool before the controller is actually up and
+  // moving finds nothing on a single attempt. Retry for a while rather than fail fast -- this is
+  // meant to run unattended alongside a capture script, not be re-launched by hand each time.
   int best_start = -1, best_len = 0;
-  for (unsigned long long s = 0; s + STRIDE <= region_size; s += 4) {
-    if (!is_cand[s / 4]) continue;
-    if (s >= STRIDE && is_cand[(s - STRIDE) / 4]) continue;  // not a chain start
-    int len = 1;
-    while (s + (unsigned long long)len * STRIDE + STRIDE <= region_size &&
-           is_cand[(s + (unsigned long long)len * STRIDE) / 4]) len++;
-    if (len > best_len) { best_len = len; best_start = (int)s; }
+  double detect_deadline = now_s() + 10.0;
+  while (now_s() < detect_deadline) {
+    if (pread(fd, buf, region_size, (off_t)base) != (ssize_t)region_size) {
+      fprintf(stderr, "[-] region read failed\n"); return 1;
+    }
+    char *is_cand = calloc((size_t)(region_size / 4) + 1, 1);  // indexed by byte-offset/4
+    for (unsigned long long s = 0; s + STRIDE <= region_size; s += 4) {
+      float q[4]; memcpy(q, buf + s + IN_QUAT, sizeof q);
+      double qn = q[0]*(double)q[0] + q[1]*(double)q[1] + q[2]*(double)q[2] + q[3]*(double)q[3];
+      if (!(qn > 0.99 && qn < 1.01)) continue;
+      float p[3]; memcpy(p, buf + s + IN_POS, sizeof p);
+      double pn = p[0]*(double)p[0] + p[1]*(double)p[1] + p[2]*(double)p[2];
+      if (pn < 1e-6 || pn > 4.0) continue;
+      is_cand[s / 4] = 1;
+    }
+    // Collect every run >= MIN_RUN, not just the longest one, and check each (longest first) for
+    // genuine VARIATION across its slots before trusting it. Length and a plausible-looking value
+    // both turned out insufficient on their own: a repeating (0,1,0,0) quaternion -- some other,
+    // unrelated fixed-value structure that happens to also be unit-norm and to recur at this same
+    // stride elsewhere in the region -- produced an 18-slot "run" with an EXACTLY constant
+    // quaternion at every slot. Real tracked motion does not hold still to the bit; requiring the
+    // quaternion to actually vary across the run is what a length/plausibility check alone misses.
+    for (unsigned long long s = 0; s + STRIDE <= region_size; s += 4) {
+      if (!is_cand[s / 4]) continue;
+      if (s >= STRIDE && is_cand[(s - STRIDE) / 4]) continue;  // not a chain start
+      int len = 1;
+      while (s + (unsigned long long)len * STRIDE + STRIDE <= region_size &&
+             is_cand[(s + (unsigned long long)len * STRIDE) / 4]) len++;
+      if (len < MIN_RUN || len <= best_len) continue;
+      float q0[4]; memcpy(q0, buf + s + IN_QUAT, sizeof q0);
+      double spread = 0;
+      for (int i = 1; i < len; i++) {
+        float qi[4]; memcpy(qi, buf + s + (unsigned long long)i * STRIDE + IN_QUAT, sizeof qi);
+        for (int k = 0; k < 4; k++) { double d = qi[k] - q0[k]; spread += d * d; }
+      }
+      if (spread < 1e-6) {
+        fprintf(stderr, "[.] rejecting %d-slot run at +0x%llx: quaternion never varies "
+                        "(not real tracked motion)\n", len, s);
+        continue;
+      }
+      best_len = len; best_start = (int)s;
+    }
+    free(is_cand);
+    if (best_len >= MIN_RUN) break;
+    fprintf(stderr, "[.] no ring yet (best run %d slots, need >= %d) -- retrying, controller may "
+                    "not be active/moving for long enough yet\n", best_len, MIN_RUN);
+    best_len = 0; best_start = -1;
+    usleep(500000);
   }
-  free(is_cand);
-  if (best_len < 3) {
-    fprintf(stderr, "[-] no plausible slot ring found (best run %d slots)\n", best_len);
+  if (best_len < MIN_RUN) {
+    fprintf(stderr, "[-] no plausible slot ring found after retrying for 10s\n");
     return 1;
   }
   if (best_len > MAX_SLOTS) best_len = MAX_SLOTS;

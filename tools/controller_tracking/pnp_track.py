@@ -13,7 +13,7 @@ comparable across frames and against Meta's own logged controller pose (research
 pose_log/dumpsys tracking convention), since the headset itself never moves during this capture.
 
 Usage: pnp_track.py <cap_dir> <basalt_calibration.json> <camA> <model.json> <out_poses.csv>
-                    [--min-blobs 4] [--reproj-thresh 0.02]
+                    [--min-blobs 4] [--reproj-thresh 0.02] [--max-blobs 9]
 """
 import argparse
 import itertools
@@ -99,6 +99,8 @@ def main():
     ap.add_argument('model')
     ap.add_argument('out_csv')
     ap.add_argument('--min-blobs', type=int, default=4)
+    ap.add_argument('--max-blobs', type=int, default=9,
+                     help='cap on blobs searched per frame -- permutations(n,5) is factorial in n')
     ap.add_argument('--reproj-thresh', type=float, default=0.02,
                      help='max mean reprojection error in normalized-bearing units')
     args = ap.parse_args()
@@ -129,10 +131,18 @@ def main():
         if len(b) == 0:
             out.write(f"{r['ts']},0,0,,,,,,,,\n")
             continue
+        n_detected = len(b)
+        if len(b) > args.max_blobs:
+            # permutations(n, k) is factorial in n for fixed k: 16 blobs (seen on richer captures,
+            # research-notes/56 only ever saw <=8) makes the brute-force search 524160 candidates
+            # per frame instead of 6720, turning a ~5s dataset run into an hours-long one. Keep the
+            # largest-area blobs -- real LED blobs bloom brighter/bigger than most noise/reflection
+            # specks -- rather than searching every detection.
+            b = b[np.argsort(-b[:, 2])[:args.max_blobs]]
         dirs = kb4_unproject(b[:, :2], intrA)
         res = track_frame(model_pts, dirs, args.min_blobs, args.reproj_thresh)
         if res is None:
-            out.write(f"{r['ts']},{len(b)},0,,,,,,,,\n")
+            out.write(f"{r['ts']},{n_detected},0,,,,,,,,\n")
             continue
         R_cam_model, t_cam_model, err = res
         # camera<-model -> IMU<-model, so poses are comparable across frames / against Meta's own
@@ -140,11 +150,11 @@ def main():
         R_imu_model = TA[:3, :3] @ R_cam_model
         t_imu_model = TA[:3, :3] @ t_cam_model + TA[:3, 3]
         qx, qy, qz, qw = R_to_quat(R_imu_model)
-        out.write(f"{r['ts']},{len(b)},{min(len(b),len(model_pts))},{err:.5f},"
+        out.write(f"{r['ts']},{n_detected},{min(len(b),len(model_pts))},{err:.5f},"
                   f"{t_imu_model[0]:.5f},{t_imu_model[1]:.5f},{t_imu_model[2]:.5f},"
                   f"{qx:.6f},{qy:.6f},{qz:.6f},{qw:.6f}\n")
         n_solved += 1
-        print(f"  ts={r['ts']}  blobs={len(b)}  err={err:.4f}  "
+        print(f"  ts={r['ts']}  blobs={n_detected}  err={err:.4f}  "
               f"t=({t_imu_model[0]:+.3f},{t_imu_model[1]:+.3f},{t_imu_model[2]:+.3f})")
     out.close()
     print(f"solved {n_solved}/{len(ir)} frames -> {args.out_csv}")
