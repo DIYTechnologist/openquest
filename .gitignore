@@ -107,3 +107,7 @@ __pycache__/
 
 # tools/cam_kernel/build.sh regenerates this the same way; never committed.
 tools/cam_kernel/.kinc/
+
+# Bring-up probe binaries, trivially rebuilt with the NDK one-liner in each's own header comment.
+tools/controller_tracking/controller_pose_log
+tools/controller_tracking/remote_pose_probe

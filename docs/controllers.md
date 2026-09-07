@@ -14,9 +14,11 @@ IR-LED constellation tracking fused inside `trackingservice` itself (`research-n
 LED geometry model exists or is extractable anywhere in this project, `tools/controller_tracking/`
 bootstraps one from our own stereo triangulation (no Meta data used) and tracks per-frame pose
 against it via brute-force correspondence search + PnP — validated self-consistent on a real
-capture, not yet validated for accuracy (needs a `TrackingServiceController` shared-memory reader,
-research-notes/56's open item, to get real per-frame ground truth). This tooling lives in `tools/`,
-not here, until it's proven — this component's own scope is still 3DoF + buttons.
+capture, not yet validated for accuracy. The missing ground-truth reader now exists and is
+validated (`research-notes/57`: `TrackingServiceController` shared memory, cross-checked exact to
+`dumpsys`'s precision) — closing the loop with a real ATE number needs a new capture running it
+alongside the image capture, not done yet. This tooling lives in `tools/`, not here, until it's
+proven — this component's own scope is still 3DoF + buttons.
 
 ## What it does
 
@@ -59,3 +61,8 @@ python3 components/controllers/ctl_decode.py ctl_capture.bin
 - Getting `/dev/video0` free for a longer/cleaner capture currently needs `trackingservice`/the
   sensors HAL stopped, and as of `research-notes/55` those no longer reliably stay stopped — open,
   undiagnosed, hit again in `research-notes/56` via a different capture path.
+- `updateRemotePoseField` (controller pose injection) is verified bit-for-bit correct against the
+  real proxy disassembly but is rejected by `trackingservice` regardless of controller state
+  (`research-notes/57`) — a server-side precondition inside code this project has already ruled off
+  limits (`research-notes/01`). Not pursued further; the ground-truth reader uses the controller's
+  own live tracked pose instead, which doesn't need injection at all.
