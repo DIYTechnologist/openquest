@@ -84,13 +84,26 @@ exports/vio-direct-*/rect/
 exports/vio-direct-*/ovconfig_dbg/
 exports/vio-direct-*/ov_*.txt
 
-# Step X (notes/20): downloaded Android toolchain deps + OpenVINS source copy, ~1 GB.
-# Reproducible via tools/openvins-android/fetch.sh; never committed.
+# Superseded by build/containers/openvins-android-deps/ and build/containers/kernel-toolchain/ --
+# these host-side caches are no longer how components/tracking or components/kernel are built, but
+# the entries are kept in case an old checkout still has them.
 work/android-deps/
-
-# Kernel build: toolchains (~250 MB) and build output. Reproducible via
-# notes/21 + work/kbuild/env.sh; never committed.
 work/kbuild/aarch64-linux-android-4.9/
 work/kbuild/arm-linux-androideabi-4.9/
 work/kbuild/out/
 __pycache__/
+
+# ─── Component build outputs (research-notes/53-era reorg: reproducible via `make`, not
+#     committed -- see each components/*/Makefile) ───
+/components/camera/cam_kernel
+/components/camera/.kinc/
+/components/controllers/sb_leech
+/components/tracking/vio_live
+/components/tracking/pose_inject
+/components/tracking/replay_feed
+/components/tracking/ov_bench
+/components/tracking/build/
+/components/kernel/build/
+
+# tools/cam_kernel/build.sh regenerates this the same way; never committed.
+tools/cam_kernel/.kinc/

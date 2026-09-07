@@ -1,59 +1,52 @@
 # Quest 1 — open VR stack on `monterey`
 
 Reverse-engineering and tooling to replace Meta's proprietary VR blobs with an open stack
-(Monado/Basalt) on a **Quest 1** (`monterey`, Snapdragon 835 / msm8998), on an owned device.
+(OpenVINS/Monado) on a **Quest 1** (`monterey`, Snapdragon 835 / msm8998), on an owned device.
+Strategy: replace Meta's services **one at a time on the stock OS** (`research-notes/17`,
+`research-notes/18`), so the eventual OS swap is a port of known-working code with a known-good
+fallback, not a big-bang rewrite.
 
-> This repo versions **source, notes, and small text/JSON artifacts** only. Large device
-> dumps, downloaded toolchains, and pulled vendor binaries are `.gitignore`d — see
-> [Regenerating excluded artifacts](#regenerating-excluded-artifacts). Some excluded data
-> (`backups/`, factory calibration) is **per-unit and sensitive** (serials, keys); do not
-> publish it.
-
-## Status
-
-| Milestone | State |
-|---|---|
-| Persistent root (Magisk, `LEGACYSAR=true`) | ✅ flashed & verified across reboot |
-| Factory calibration export + Basalt/Kalibr converter | ✅ |
-| Oculus sensors HAL (`vendor.oculus.hardware.sensors@1.0`) reverse-engineered | ✅ |
-| Live enumeration client (getProperties/getChannels) | ✅ struct layouts verified |
-| Cross-compile toolchain (NDK + AOSP headers + `__1` ABI fix) | ✅ |
-| `hidl-gen` built from source; `ISensorClient` bindings generated | ✅ |
-| IMU FMQ streaming client reaches the HAL over binder | ✅ (real transaction) |
-| First IMU frame | ✅ superseded — the HIDL client was abandoned; IMU now comes straight from the open `oculus_syncboss` kernel FIFO at ~994 Hz (notes/08) |
-| Open camera stack (cameras + IMU driven from our own process, no trackingservice) | ✅ notes/11 |
-| Basalt VIO on an open-stack capture | ⏳ dataset builds cleanly but the filter diverges (notes/12) |
+> This repo versions **source, notes, and small text/JSON artifacts** only. Large device dumps and
+> pulled vendor binaries are `.gitignore`d — see [Building](#building). Some excluded data
+> (`backups/`, factory calibration) is **per-unit and sensitive** (serials, keys); do not publish it.
 
 ## Layout
 
-- `notes/` — the primary record. Read in order:
-  - `01-recon-findings.md`, `02-owner-admin-adb-access.md`
-  - `03-persistent-root-magisk.md` — Magisk boot patch, the `LEGACYSAR` root cause, flash
-  - `04-openvr-stack-survey.md` — what Meta ships; where the blobs are
-  - `05-calibration-export.md` — factory cam/IMU/mag calibration + the converter
-  - `06-sensor-tap-probe.md` — Syncboss (open IMU path) + camera V4L2 + the Oculus HIDL HAL
-  - `07-hal-A-camera-imu-interface.md` — the HAL interface, toolchain, hidl-gen, streaming client
-- `tools/`
-  - `quest_calib_convert.py` — Meta factory calib → Basalt/Kalibr (`exports/.../openvr_calib_out/`)
-  - `hal_probe/` — live HAL enumeration client (recovers struct layouts empirically)
-  - `hal_stream/` — IMU FMQ streaming client (`hal_stream2.cpp` uses the generated ISensorClient)
-  - `hidl-build/` — `build_hidlgen.sh` + reconstructed `.hal` (`iface/`) for generating bindings
-- `recon/`, `exports/`, `devicetree/` — text findings, converted calibration, DT dumps
-  (large binaries within are gitignored)
+- **[`components/`](components/)** — one directory per Meta service being replaced, each
+  independently buildable via its own `Makefile`: `camera/`, `controllers/`, `tracking/`, `kernel/`.
+  See **[`docs/`](docs/)** for what each replaces, its status, and how to run it.
+- **[`tools/`](tools/)** — everything supporting that work which isn't itself a shipped replacement
+  binary: reverse-engineering/diagnostic tools (some superseded, kept for reference) and offline
+  research scripts (VIO accuracy measurement, calibration conversion, dataset building).
+- **[`research-notes/`](research-notes/)** — the chronological research record, read in numeric
+  order. Start from `research-notes/52-CHECKPOINT-ate-controllers-display.md` and
+  `research-notes/53-room-scale-ate-static-init.md` for the current state; earlier notes are kept
+  as-written even where later notes supersede them.
+- `recon/`, `exports/`, `devicetree/` — text findings, converted calibration, DT dumps (large
+  binaries within are gitignored).
 
-## Regenerating excluded artifacts
+## Status
 
-The build/RE toolchain is downloaded, not committed. To rebuild:
+See [`docs/README.md`](docs/README.md) for the per-component status table. Summary: camera capture
+and controller input decoding are done with zero Meta userspace code; tracking (VIO + pose
+injection into Meta's own compositor) is running with a measured accuracy of 7.6 cm ATE in-place
+and 11.7 cm ATE over a 60.6 m room-scale walk against Meta's own tracker as ground truth; the
+kernel build is reproducible and boots; display/compositor characterisation is done but Monado
+integration hasn't started; the OS swap hasn't started (gated on the above).
 
-1. **Android NDK r27c** → `tools/android-ndk-r27c/`
-   `curl -O https://dl.google.com/android/repository/android-ndk-r27c-linux.zip && unzip`
-2. **AOSP Android-10 headers** → `tools/aosp-headers/inc/` (libfmq, libhidl, libcutils,
-   libutils, liblog, libhwbinder; from `android-10.0.0_r47` gitiles archives — see notes/07).
-3. **hidl-gen** → `tools/hidl-build/`: fetch `system/tools/hidl` + libbase (`system/core/base`),
-   `bash tools/hidl-build/build_hidlgen.sh`. Grammar/toolchain fixes are documented in notes/07
-   (bison `%define api.pure` removal; flex `YYSTYPE`/`YYLTYPE` shim; `-fno-rtti`; etc.).
-4. **Device libs** → `recon/hal-A-2026-08-31/devlibs/`: `adb pull` the runtime `.so`s (list in
-   notes/07). Build clients per the `build.sh` in each `tools/hal_*` dir.
+## Building
+
+Each component cross-compiles inside a container — no Android NDK, kernel toolchain, or
+OpenCV/Boost/Eigen/OpenVINS needs installing on the host, only `git` and `podman` (or `docker`):
+
+```
+make base-images   # one-time: build the shared toolchain images (build/containers/)
+make               # build every component
+```
+
+See [`docs/README.md`](docs/README.md#building) for building/running a single component, and
+`tools/hidl-build/`, `tools/aosp-headers/` for the (unchanged, host-side) regeneration steps that
+tooling under `tools/` still needs, documented at the top of each of those directories.
 
 ## Scope
 
