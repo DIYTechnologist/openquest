@@ -5,13 +5,15 @@
 #                         documented deviation in CONFIG_DEVIATIONS.md
 #   ./build.sh instrument adds CONFIG_MSMB_CAMERA_DEBUG=y + CONFIG_DYNAMIC_DEBUG=y
 #
-# Prerequisites (see notes/21): AOSP GCC 4.9 toolchains cloned into work/kbuild/. The 4.9
-# toolchain is not arbitrary -- it produces the byte-identical compiler string found in the
-# device's own /proc/version.
+# Runs inside the quest-kernel-toolchain container (build/containers/kernel-toolchain/Dockerfile),
+# which provides the AOSP GCC 4.9 toolchains -- not arbitrary, it's the byte-identical compiler
+# string found in the device's own /proc/version (research-notes/21). Invoke via `make` (see this
+# component's Makefile), or directly as `podman run ... build.sh [instrument]`.
 set -e
-cd "$(dirname "$0")/../.."
-ROOT=$(pwd)
-. "$ROOT/work/kbuild/env.sh"
+cd "$(dirname "$0")"
+HERE=$(pwd)
+ROOT=$(cd "$HERE/../.." && pwd)
+. "$HERE/env.sh"
 
 mkdir -p "$KOUT"
 if [ ! -f "$KOUT/.config" ]; then
@@ -35,8 +37,13 @@ if [ "$1" = "instrument" ]; then
   sed -i 's|^# CONFIG_DYNAMIC_DEBUG is not set|CONFIG_DYNAMIC_DEBUG=y|' "$KOUT/.config"
 fi
 
-M="make -C $KSRC O=$KOUT ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE \
-   CROSS_COMPILE_ARM32=$CROSS_COMPILE_ARM32 HOSTCFLAGS=$KHOSTCFLAGS HOSTLDFLAGS=$KHOSTLDFLAGS"
-$M olddefconfig
-$M -j"$(nproc)" Image.gz-dtb
+# Quoted NAME=value assignments, not a flat $M string re-split by the shell: HOSTCFLAGS is itself
+# several space-separated flags, and an unquoted expansion tears it into separate argv words --
+# make's getopt then parses fragments like "-std=gnu89" as bundled short options and fails on '='.
+kmake() {
+  make -C "$KSRC" O="$KOUT" ARCH=arm64 CROSS_COMPILE="$CROSS_COMPILE" \
+    CROSS_COMPILE_ARM32="$CROSS_COMPILE_ARM32" HOSTCFLAGS="$KHOSTCFLAGS" HOSTLDFLAGS="$KHOSTLDFLAGS" "$@"
+}
+kmake olddefconfig
+kmake -j"$(nproc)" Image.gz-dtb
 echo "built: $KOUT/arch/arm64/boot/Image.gz-dtb"
