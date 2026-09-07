@@ -15,7 +15,10 @@
 // Debugging strategy: run this under tools/cam_kernel/libioctl_trace.so and diff the resulting
 // trace against the vendor reference trace. Any divergence in order or payload is the bug.
 //
-// Build: see build_cam_kernel.sh.   Run: cam_kernel [ncams] [seconds] [exposure] [gain]
+// Build: make -C components/camera.   Run: cam_kernel [ncams] [seconds] [exposure] [gain]
+//                                            [savecams] [outdir]
+// CAMKERNEL_SAVE_THRESH=<n> overrides the bright-frame save threshold (default 20.0, see
+// save_thresh() below) -- set to 0 to also keep the dim/short-exposure class, normally discarded.
 
 #define _GNU_SOURCE
 #include <errno.h>
@@ -712,7 +715,17 @@ static int bringup_camera(struct cam *c, int i, struct subdevs *sd, int ispif_fd
   return 0;
 }
 
+// Bright-frame save threshold, on the same stripe sample build_euroc_direct.py uses. Overridable
+// for diagnostic captures that need the dim (short-exposure) class too -- e.g. the controller IR-
+// LED constellation search (research-notes/41, research-notes/52), which that class is suspected
+// to carry and which no capture has ever retained. CAMKERNEL_SAVE_THRESH=0 keeps everything.
+static double save_thresh(void) {
+  const char *e = getenv("CAMKERNEL_SAVE_THRESH");
+  return e ? atof(e) : 20.0;
+}
+
 int main(int argc, char **argv) {
+  double thresh = save_thresh();
   int ncam = argc > 1 ? atoi(argv[1]) : 1;
   int secs = argc > 2 ? atoi(argv[2]) : 3;
   uint16_t exposure = argc > 3 ? (uint16_t)atoi(argv[3]) : 3000;
@@ -869,7 +882,7 @@ int main(int argc, char **argv) {
         const unsigned char *px = cams[i].buf[vb.index].va;
         unsigned long sum = 0; int nsamp = 0;
         for (int k = W * 1; k < W * (1 + 480); k += 64) { sum += px[k]; nsamp++; }
-        if (nsamp && (double)sum / nsamp >= 20.0) {          // SLAM (long-exposure) frames only
+        if (nsamp && (double)sum / nsamp >= thresh) {          // SLAM (long-exposure) frames only
           struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
           emit('C', (uint8_t)i, W, H, (uint64_t)vb.timestamp.tv_sec * 1000000000ull +
                (uint64_t)vb.timestamp.tv_usec * 1000ull,
@@ -883,7 +896,7 @@ int main(int argc, char **argv) {
         const unsigned char *px = cams[i].buf[vb.index].va;
         unsigned long sum = 0; int nsamp = 0;
         for (int k = W * 1; k < W * (1 + 480); k += 64) { sum += px[k]; nsamp++; }
-        if (nsamp && (double)sum / nsamp >= 20.0) {
+        if (nsamp && (double)sum / nsamp >= thresh) {
           char fn[64], fp[320];
           snprintf(fn, sizeof fn, "c%d_%06d.gray", i, got[i]);
           snprintf(fp, sizeof fp, "%s/raw/%s", g_outdir, fn);
