@@ -1,14 +1,16 @@
 #!/bin/sh
-# Build the ioctl tracer against the PUBLISHED kernel uapi headers, so every ioctl code is computed
-# by the compiler from the same definitions the kernel uses rather than transcribed.
+# Build the ioctl tracer (LD_PRELOAD shim used to capture the ORIGINAL reference trace against the
+# vendor B1 path -- research-notes/19). Superseded as a build target for cam_kernel itself: that
+# binary is now components/camera (its own containerized Makefile). msm_ioctl_table.h moved there
+# too, since it's the canonical ioctl-name table generated from the published kernel headers; this
+# tool includes it by relative path rather than keeping a second copy.
 set -e
 cd "$(dirname "$0")"
 HERE=$(pwd)
+CAMERA=$HERE/../../components/camera
 NDK=${NDK:-$HERE/../android-ndk-r27c}
 K=$(cd "${K:-$HERE/../../work/oculus-kernel}" && pwd)
 CC=$(ls "$NDK"/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android29-clang | head -1)
-
-sh ./gen_ioctl_table.sh "$K"
 
 # Stage ONLY the media/ headers. Putting $K/include/uapi on the include path makes bionic's own
 # #include <linux/types.h> resolve to kernel headers, which then redefine struct sigaction and
@@ -20,8 +22,5 @@ cp "$K"/include/uapi/media/*.h .kinc/media/
 cp "$K"/include/uapi/linux/media.h .kinc/linux/
 cp "$K"/drivers/staging/android/uapi/ion.h .kinc/linux/       # ION is Android-only, not in uapi/linux
 
-"$CC" -shared -fPIC -O2 -o libioctl_trace.so ioctl_trace.c -I. -I.kinc -ldl
+"$CC" -shared -fPIC -O2 -o libioctl_trace.so ioctl_trace.c -I. -I.kinc -I"$CAMERA/src" -ldl
 echo "built $HERE/libioctl_trace.so"
-
-"$CC" -O2 -o cam_kernel cam_kernel.c -I. -I.kinc
-echo "built $HERE/cam_kernel"
