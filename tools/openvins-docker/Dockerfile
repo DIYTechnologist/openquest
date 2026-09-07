@@ -4,7 +4,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake git ca-certificates \
       libeigen3-dev libopencv-dev libboost-all-dev libceres-dev \
  && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 https://github.com/rpng/open_vins.git /open_vins
+# Pinned, not --depth 1 off whatever HEAD is on build day: components/tracking's on-device build
+# (build/containers/openvins-android-deps/Dockerfile) checks out this exact commit too, so the
+# on-device numbers and this host-side validation environment describe the same code. Bump both
+# together if OpenVINS is ever updated.
+RUN git clone https://github.com/rpng/open_vins.git /open_vins \
+ && git -C /open_vins checkout -q 69488123ed9362dd44b6f28e7f4680abbff1442b
 # ENABLE_ROS=OFF makes each package build as a plain CMake library. ov_core -> ov_init -> ov_msckf.
 RUN for p in ov_core ov_init ov_msckf; do \
       cmake -S /open_vins/$p -B /build/$p -DCMAKE_BUILD_TYPE=Release -DENABLE_ROS=OFF \
