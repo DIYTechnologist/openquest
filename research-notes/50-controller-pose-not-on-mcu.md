@@ -1,5 +1,10 @@
 # Controller pose is not on the MCU stream — 2026-09-05
 
+> **The question this note leaves open ("not settled") is answered in `research-notes/55`**: camera-
+> based IR-LED constellation tracking, fused inside `trackingservice` itself, confirmed and
+> quantified directly from the service's own logging. This note's own finding — pose is not
+> transmitted by the controller's MCU — stands unchanged.
+
 `notes/18` flagged the key architectural unknown for step 3: is 6DoF controller pose fused on the
 MCU, in `trackingservice`, or from camera IR blobs? Answered as far as passive listening can answer
 it, by capturing the full raw stream while both controllers were actually moved.

@@ -7,10 +7,13 @@ stream, with no Meta userspace code. Replaces the controller half of
 ## Status
 
 Input decoding is done — every control on both controllers, matched against Meta's reported state
-(`research-notes/49`). **6DoF controller pose is not yet placed**: it is confirmed absent from the
-raw MCU stream (`research-notes/50`), so it is fused either inside `trackingservice` from another
-source, or from camera IR blobs (constellation tracking) — undetermined, and the open item for this
-component.
+(`research-notes/49`). **6DoF controller pose fusion is now understood, but not yet replaced.**
+Confirmed absent from the raw MCU stream (`research-notes/50`), and now confirmed and quantified as
+camera-based IR-LED constellation tracking, fused inside `trackingservice` itself
+(`research-notes/55`, from the service's own logging: ~15-18 blobs/frame detected, ~5 matched to
+the controller's known LED IDs, match success 0.95-1.00 when tracked). Implementing our own
+constellation tracker to replace it is unstarted and is its own project
+(`research-notes/18` step 3 kill criterion) — this component's actual scope is still 3DoF + buttons.
 
 ## What it does
 
@@ -46,6 +49,9 @@ python3 components/controllers/ctl_decode.py ctl_capture.bin
 ## Known limits
 
 - No build step for `ctl_decode.py`/`ctl_run.sh` — pure Python/shell, run as-is.
-- Controller 6DoF pose fusion location is open; if it turns out to require camera-based
-  constellation tracking, that becomes its own research project (`research-notes/18` step 3 kill
-  criterion) and this component's scope stays 3DoF + buttons until then.
+- 6DoF pose fusion does require camera-based constellation tracking (confirmed,
+  `research-notes/55`), so it is its own research project per `research-notes/18` step 3's kill
+  criterion, and this component's scope stays 3DoF + buttons until that project starts.
+- Getting `/dev/video0` free for any future work here (e.g. capturing the raw blob images, not just
+  trackingservice's summary stats) currently needs `trackingservice`/the sensors HAL stopped, and as
+  of `research-notes/55` those no longer reliably stay stopped — open, undiagnosed.

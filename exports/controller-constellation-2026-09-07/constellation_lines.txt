@@ -1,0 +1,87 @@
+09-07 20:54:44.496  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:54:44.712  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:45.707  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: bd72c33a8a854301 (R): [FusionTracked=0.268, OutputTracked=0.268, OutputValid=0.268] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:54:45.709  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: 6e59a754d9c4b837 (L): [FusionTracked=0.000, OutputTracked=0.000, OutputValid=0.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:54:45.713  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:46.496  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:54:46.715  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:47.715  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:48.496  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:54:48.715  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:48.816  6615  6789 W [CT]    : CONSTELLATION: R: Camera is ahead of IMU by 0.7 ms! Sleeping vision thread for 3 ms.
+09-07 20:54:49.717  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:50.536  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:54:50.717  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:51.719  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:52.456  6615  6789 I [CT]    : CONSTELLATION:VISION_STATUS: 6e59a754d9c4b837 (L): BlobDetection:[#BlobsDetected=(14.77, 30.72)]Matching:[MatchSuccess=0.000, MatchCost=(0.00000, 0.00000), #MatchedBlobs=(0.00, 0.00), #MatchedLeds=(0.00, 0.00), RematchM=0.000, SkipRefine=0.000] MatchMethod:[Prox=0.000, ConstBrute=0.000, UnconstBrute=0.000] MatchResets[AnomBlobSize=0.000, SharedMatch=0.000, DenseReacq=0.000] | Fusion:[FusionError=0.000, ImuFromCamMs=(5.739, 7.948), RematchF=0.000] FusionUpdates:[Successful=0.000, Reliable=0.000, TightFusion=0.000, FullPose=0.000, StaticPrior=0.000, StaticForHandTrans=1.000, PoseUpdateMD=(0.0000, 0.0000)] FusionResets[6DoFReset=1.000, ResetSuccess=0.000] FusionStatus[HasPosition=0.000, HasVelocity=0.000] 
+09-07 20:54:52.458  6615  6789 I [CT]    : CONSTELLATION:VISION_STATUS: bd72c33a8a854301 (R): BlobDetection:[#BlobsDetected=(14.77, 30.72)]Matching:[MatchSuccess=0.948, MatchCost=(0.00245, 0.00000), #MatchedBlobs=(10.95, 35.19), #MatchedLeds=(4.73, 2.44), RematchM=0.008, SkipRefine=0.040] MatchMethod:[Prox=0.936, ConstBrute=0.008, UnconstBrute=0.004] MatchResets[AnomBlobSize=0.000, SharedMatch=0.000, DenseReacq=0.000] | Fusion:[FusionError=0.000, ImuFromCamMs=(5.555, 7.665), RematchF=0.124] FusionUpdates:[Successful=0.948, Reliable=0.900, TightFusion=0.904, FullPose=0.040, StaticPrior=0.000, StaticForHandTrans=0.000, PoseUpdateMD=(0.9057, 1.8161)] FusionResets[6DoFReset=0.052, ResetSuccess=0.004] FusionStatus[HasPosition=0.952, HasVelocity=0.948] 
+09-07 20:54:52.536  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:54:52.719  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:53.721  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:54.536  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:54:54.723  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:55.710  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: bd72c33a8a854301 (R): [FusionTracked=1.000, OutputTracked=1.000, OutputValid=1.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:54:55.711  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: 6e59a754d9c4b837 (L): [FusionTracked=0.000, OutputTracked=0.000, OutputValid=0.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:54:55.723  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:56.576  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:54:56.726  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:57.727  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:58.576  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:54:58.729  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:54:59.729  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:00.616  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:00.729  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:01.730  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:02.457  6615  6789 I [CT]    : CONSTELLATION:VISION_STATUS: 6e59a754d9c4b837 (L): BlobDetection:[#BlobsDetected=(17.14, 37.44)]Matching:[MatchSuccess=0.000, MatchCost=(0.00000, 0.00000), #MatchedBlobs=(0.00, 0.00), #MatchedLeds=(0.00, 0.00), RematchM=0.000, SkipRefine=0.000] MatchMethod:[Prox=0.000, ConstBrute=0.000, UnconstBrute=0.000] MatchResets[AnomBlobSize=0.000, SharedMatch=0.000, DenseReacq=0.000] | Fusion:[FusionError=0.000, ImuFromCamMs=(5.181, 0.459), RematchF=0.000] FusionUpdates:[Successful=0.000, Reliable=0.000, TightFusion=0.000, FullPose=0.000, StaticPrior=0.000, StaticForHandTrans=1.000, PoseUpdateMD=(0.0000, 0.0000)] FusionResets[6DoFReset=1.000, ResetSuccess=0.000] FusionStatus[HasPosition=0.000, HasVelocity=0.000] 
+09-07 20:55:02.458  6615  6789 I [CT]    : CONSTELLATION:VISION_STATUS: bd72c33a8a854301 (R): BlobDetection:[#BlobsDetected=(17.14, 37.44)]Matching:[MatchSuccess=1.000, MatchCost=(0.00285, 0.00000), #MatchedBlobs=(14.23, 38.63), #MatchedLeds=(5.46, 1.14), RematchM=0.000, SkipRefine=0.028] MatchMethod:[Prox=1.000, ConstBrute=0.000, UnconstBrute=0.000] MatchResets[AnomBlobSize=0.000, SharedMatch=0.000, DenseReacq=0.000] | Fusion:[FusionError=0.000, ImuFromCamMs=(5.116, 0.491), RematchF=0.092] FusionUpdates:[Successful=1.000, Reliable=0.960, TightFusion=0.980, FullPose=0.020, StaticPrior=0.000, StaticForHandTrans=0.000, PoseUpdateMD=(0.6823, 0.6838)] FusionResets[6DoFReset=0.000, ResetSuccess=0.000] FusionStatus[HasPosition=1.000, HasVelocity=1.000] 
+09-07 20:55:02.616  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:02.731  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:03.731  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:04.656  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:04.733  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:05.711  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: 6e59a754d9c4b837 (L): [FusionTracked=0.000, OutputTracked=0.000, OutputValid=0.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:55:05.712  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: bd72c33a8a854301 (R): [FusionTracked=1.000, OutputTracked=1.000, OutputValid=1.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:55:05.733  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:06.657  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:06.735  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:07.736  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:08.696  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:08.738  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:09.739  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:10.697  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:10.740  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:11.741  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:12.457  6615  6789 I [CT]    : CONSTELLATION:VISION_STATUS: 6e59a754d9c4b837 (L): BlobDetection:[#BlobsDetected=(18.13, 33.01)]Matching:[MatchSuccess=0.000, MatchCost=(0.00000, 0.00000), #MatchedBlobs=(0.00, 0.00), #MatchedLeds=(0.00, 0.00), RematchM=0.000, SkipRefine=0.000] MatchMethod:[Prox=0.000, ConstBrute=0.000, UnconstBrute=0.000] MatchResets[AnomBlobSize=0.000, SharedMatch=0.000, DenseReacq=0.000] | Fusion:[FusionError=0.000, ImuFromCamMs=(5.138, 0.424), RematchF=0.000] FusionUpdates:[Successful=0.000, Reliable=0.000, TightFusion=0.000, FullPose=0.000, StaticPrior=0.000, StaticForHandTrans=1.000, PoseUpdateMD=(0.0000, 0.0000)] FusionResets[6DoFReset=1.000, ResetSuccess=0.000] FusionStatus[HasPosition=0.000, HasVelocity=0.000] 
+09-07 20:55:12.457  6615  6789 I [CT]    : CONSTELLATION:VISION_STATUS: bd72c33a8a854301 (R): BlobDetection:[#BlobsDetected=(18.13, 33.01)]Matching:[MatchSuccess=1.000, MatchCost=(0.00283, 0.00000), #MatchedBlobs=(15.26, 34.02), #MatchedLeds=(5.48, 1.57), RematchM=0.000, SkipRefine=0.000] MatchMethod:[Prox=1.000, ConstBrute=0.000, UnconstBrute=0.000] MatchResets[AnomBlobSize=0.000, SharedMatch=0.000, DenseReacq=0.000] | Fusion:[FusionError=0.000, ImuFromCamMs=(5.042, 0.702), RematchF=0.076] FusionUpdates:[Successful=1.000, Reliable=0.980, TightFusion=0.976, FullPose=0.024, StaticPrior=0.000, StaticForHandTrans=0.000, PoseUpdateMD=(0.5845, 1.2531)] FusionResets[6DoFReset=0.000, ResetSuccess=0.000] FusionStatus[HasPosition=1.000, HasVelocity=1.000] 
+09-07 20:55:12.736  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:12.743  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:13.744  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:14.736  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:14.744  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:15.713  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: 6e59a754d9c4b837 (L): [FusionTracked=0.000, OutputTracked=0.000, OutputValid=0.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:55:15.713  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: bd72c33a8a854301 (R): [FusionTracked=1.000, OutputTracked=1.000, OutputValid=1.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:55:15.745  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:16.745  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:16.776  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:17.745  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:18.747  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:18.816  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:19.747  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:20.748  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:20.817  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:21.749  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:22.457  6615  6789 I [CT]    : CONSTELLATION:VISION_STATUS: 6e59a754d9c4b837 (L): BlobDetection:[#BlobsDetected=(17.58, 36.27)]Matching:[MatchSuccess=0.000, MatchCost=(0.00000, 0.00000), #MatchedBlobs=(0.00, 0.00), #MatchedLeds=(0.00, 0.00), RematchM=0.000, SkipRefine=0.000] MatchMethod:[Prox=0.000, ConstBrute=0.000, UnconstBrute=0.000] MatchResets[AnomBlobSize=0.000, SharedMatch=0.000, DenseReacq=0.000] | Fusion:[FusionError=0.000, ImuFromCamMs=(5.174, 0.538), RematchF=0.000] FusionUpdates:[Successful=0.000, Reliable=0.000, TightFusion=0.000, FullPose=0.000, StaticPrior=0.000, StaticForHandTrans=1.000, PoseUpdateMD=(0.0000, 0.0000)] FusionResets[6DoFReset=1.000, ResetSuccess=0.000] FusionStatus[HasPosition=0.000, HasVelocity=0.000] 
+09-07 20:55:22.457  6615  6789 I [CT]    : CONSTELLATION:VISION_STATUS: bd72c33a8a854301 (R): BlobDetection:[#BlobsDetected=(17.58, 36.27)]Matching:[MatchSuccess=1.000, MatchCost=(0.00269, 0.00000), #MatchedBlobs=(14.72, 37.36), #MatchedLeds=(5.19, 2.16), RematchM=0.000, SkipRefine=0.032] MatchMethod:[Prox=1.000, ConstBrute=0.000, UnconstBrute=0.000] MatchResets[AnomBlobSize=0.000, SharedMatch=0.000, DenseReacq=0.000] | Fusion:[FusionError=0.000, ImuFromCamMs=(5.004, 0.765), RematchF=0.124] FusionUpdates:[Successful=1.000, Reliable=0.964, TightFusion=0.960, FullPose=0.040, StaticPrior=0.000, StaticForHandTrans=0.000, PoseUpdateMD=(0.0654, 0.0078)] FusionResets[6DoFReset=0.000, ResetSuccess=0.000] FusionStatus[HasPosition=1.000, HasVelocity=1.000] 
+09-07 20:55:22.750  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:22.857  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:23.750  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:24.750  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=499] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:24.896  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:25.715  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: 6e59a754d9c4b837 (L): [FusionTracked=0.000, OutputTracked=0.000, OutputValid=0.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:55:25.716  6615  6661 I [CT]    : CONSTELLATION:IMU_STATUS: bd72c33a8a854301 (R): [FusionTracked=1.000, OutputTracked=1.000, OutputValid=1.000] [AccelSat=0.000, GyroSat=0.000] 
+09-07 20:55:25.752  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:26.754  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:26.896  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
+09-07 20:55:27.755  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=501] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:28.757  6615  6661 W [CT]    : CONSTELLATION: [Throttled count=500] L: Could not retrieve 3dof fallback pose.
+09-07 20:55:28.897  6615  6789 I [CT]    : CONSTELLATION: L: Not reinitializing 6DoF filter yet (no valid pose from matching).
