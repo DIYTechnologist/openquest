@@ -15,13 +15,13 @@ LED geometry model exists or is extractable anywhere in this project, `tools/con
 bootstraps one from our own stereo triangulation (no Meta data used) and tracks per-frame pose
 against it (`research-notes/56`: brute-force correspondence search; `research-notes/59`: a faster,
 temporal prior-guided search that also self-disambiguates most wrong matches once tracking is
-established). **When correspondence is correct, accuracy is sub-centimetre** (1.8-3.8 mm median,
+established). **When correspondence is correct, accuracy is sub-centimetre** (1.8-3.7 mm median,
 robust-fit) **against the controller's own live tracked pose as ground truth**
-(`research-notes/57`) — **but correspondence is only correct in ~73-74% of frames** in the best run
-so far; the remaining ~26-27% are outright wrong-correspondence outliers, not small errors
-(`research-notes/59`). Both halves of that matter — quoting either alone misrepresents it. This
-tooling lives in `tools/`, not here, until it's proven — this component's own scope is still
-3DoF + buttons.
+(`research-notes/57`) — **but correspondence is only correct in ~80% of frames** at the current
+tuned thresholds (`research-notes/60`; was ~73% before tuning, `research-notes/59`); the remainder
+are outright wrong-correspondence outliers, not small errors. Both halves of that matter — quoting
+either alone misrepresents it. This tooling lives in `tools/`, not here, until it's proven — this
+component's own scope is still 3DoF + buttons.
 
 ## What it does
 
@@ -57,17 +57,20 @@ python3 components/controllers/ctl_decode.py ctl_capture.bin
 ## Known limits
 
 - No build step for `ctl_decode.py`/`ctl_run.sh` — pure Python/shell, run as-is.
-- **~26-27% of frames are still wrong-correspondence outliers**, not small errors (up to 0.93 m off)
-  — the prior-guided path's gate/reprojection thresholds are untuned first defaults
-  (`research-notes/59`). Any blob detector alone cannot distinguish the tracked controller's real
-  LEDs from another genuine IR source in view (the other controller, sitting idle, was found
-  contaminating every frame at research-notes/59) — only motion does, since the camera is fixed for
-  the whole capture; this is now filtered (`find_static_positions`/`filter_static` in
-  `blob_detect.py`) but not perfectly. Not real-time, not on-device.
-- Sim3 alignment needs scale ~0.34 to fit, consistently across two different bug-fix rounds —
-  verified this is *not* a triangulation math bug (a synthetic round-trip test recovers a known 3D
-  point to 0.0000 mm) but real correspondence-error noise, still not isolated further
-  (`research-notes/58`, `research-notes/59`).
+- **~20% of frames are still wrong-correspondence outliers**, not small errors (up to 0.68 m off) —
+  tightening the prior-guided path's gate/reprojection thresholds cut this from ~27%
+  (`research-notes/60`), but no further gain was found before tightening became pathological (the
+  brute-force fallback dominates when the prior almost never satisfies its own gate). Any blob
+  detector alone cannot distinguish the tracked controller's real LEDs from another genuine IR
+  source in view (the other controller, sitting idle, was found contaminating every frame,
+  `research-notes/59`) — only motion does, since the camera is fixed for the whole capture; this is
+  filtered (`find_static_positions`/`filter_static` in `blob_detect.py`) but not perfectly. Not
+  real-time, not on-device.
+- Sim3 alignment needs scale ~0.34 to fit, consistently across three different bug-fix/tuning rounds
+  — verified this is *not* a triangulation math bug (a synthetic round-trip test recovers a known 3D
+  point to 0.0000 mm). One concrete hypothesis (a lever-arm/reference-point mismatch between our
+  model's centroid and Meta's own convention) was checked and did not hold up cleanly across
+  different subsets of the same data (`research-notes/60`) — still open.
 - Getting `/dev/video0` free for a longer/cleaner capture currently needs `trackingservice`/the
   sensors HAL stopped, and as of `research-notes/55` those no longer reliably stay stopped — open,
   undiagnosed, hit again in `research-notes/56`/`58` via a different capture path.

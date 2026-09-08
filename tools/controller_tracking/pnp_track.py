@@ -172,10 +172,16 @@ def main():
     ap.add_argument('--min-blobs', type=int, default=4)
     ap.add_argument('--max-blobs', type=int, default=9,
                      help='cap on blobs searched per frame -- permutations(n,5) is factorial in n')
-    ap.add_argument('--reproj-thresh', type=float, default=0.02,
-                     help='max mean reprojection error in normalized-bearing units')
-    ap.add_argument('--gate', type=float, default=0.08,
-                     help='prior-guided match gate, normalized-bearing units')
+    ap.add_argument('--reproj-thresh', type=float, default=0.01,
+                     help='max mean reprojection error in normalized-bearing units. Tightened from '
+                          '0.02 (research-notes/59): measurably fewer wrong-correspondence outliers '
+                          '(27%% -> 20%% of matched frames) at a real but smaller cost in coverage. '
+                          'Tightening much further (0.006/gate 0.015) made the brute-force fallback '
+                          'pathological -- almost every frame missing the prior gate and needing '
+                          'reacquisition -- so this is a measured stopping point, not a proven '
+                          'optimum.')
+    ap.add_argument('--gate', type=float, default=0.03,
+                     help='prior-guided match gate, normalized-bearing units. See --reproj-thresh.')
     ap.add_argument('--max-prior-gap-s', type=float, default=0.5,
                      help='do not trust the prior across a gap longer than this (camera clock)')
     args = ap.parse_args()
