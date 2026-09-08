@@ -24,7 +24,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0])
-from blob_detect import find_blobs
+from blob_detect import find_blobs, find_static_positions, filter_static
 
 W, H = 640, 480  # after dropping the metadata row
 
@@ -150,6 +150,16 @@ def main():
 
     blob = open(f'{args.cap_dir}/frames.bin', 'rb')
 
+    # Exclude any IR source that doesn't move across the capture -- most plausibly the OTHER
+    # controller sitting idle in view rather than the one being moved for this capture
+    # (research-notes/58 found this created an incoherent, wrongly-scaled model by mixing points
+    # from two different rigid bodies). The camera itself is fixed all session, so real motion is
+    # the only thing that distinguishes "the tracked controller" from "anything else IR-bright".
+    static_A = find_static_positions(lambda r: read_frame(blob, r['off'], r['size']), ca)
+    static_B = find_static_positions(lambda r: read_frame(blob, r['off'], r['size']), cb)
+    print(f"static (non-moving) sources excluded: cam{args.camA}={len(static_A)} "
+          f"cam{args.camB}={len(static_B)}")
+
     best = None
     tb_ts = np.array([r['ts'] for r in cb])
     for ra in ca:
@@ -161,7 +171,8 @@ def main():
         imB = read_frame(blob, rb['off'], rb['size'])
         if imA is None or imB is None:
             continue
-        bA, bB = find_blobs(imA), find_blobs(imB)
+        bA = filter_static(find_blobs(imA), static_A)
+        bB = filter_static(find_blobs(imB), static_B)
         if len(bA) < 2 or len(bB) < 2:
             continue
         score = min(len(bA), len(bB))

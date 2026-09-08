@@ -43,17 +43,18 @@ def load_frame_clock_map(cap_dir):
 
 
 def load_pnp_poses(path, cts_to_mono):
+    # pnp_track.py columns: ts_ns,n_blobs,n_used,reproj_err,method,px,py,pz,qx,qy,qz,qw
     rows = []
     for line in open(path):
         if line.startswith('#'):
             continue
         p = line.strip().split(',')
-        if p[4] == '':  # unsolved frame
+        if len(p) < 6 or p[5] == '':  # unsolved frame
             continue
         cts = int(p[0])
         if cts not in cts_to_mono:
             continue
-        rows.append((cts_to_mono[cts], float(p[4]), float(p[5]), float(p[6])))
+        rows.append((cts_to_mono[cts], float(p[5]), float(p[6]), float(p[7])))
     rows.sort()
     return np.array(rows)  # columns: mono_ns, x, y, z
 
@@ -132,6 +133,24 @@ def main():
         print(f"  median / max : {np.median(e):.4f} m / {e.max():.4f} m")
         if ws:
             print(f"  scale        : {s:.3f}")
+
+        # The speed filter only catches a jump relative to the immediately-previous ACCEPTED
+        # sample; an isolated wrong frame that happens to land near its neighbours in time (but
+        # not in the true trajectory) survives it and can still dominate a global least-squares
+        # fit -- Umeyama minimizes total squared error, so a handful of bad points pull the WHOLE
+        # alignment (including scale) toward fitting them at everyone else's expense. Refit after
+        # dropping residual outliers, same rationale as the speed filter, one level up.
+        keep = e < np.median(e) + 3 * (np.median(np.abs(e - np.median(e))) + 1e-9)
+        if keep.sum() < len(e) and keep.sum() >= 10:
+            s2, R2, t2 = umeyama(pe[keep], pg[keep], ws)
+            al2 = s2 * (R2 @ pe.T).T + t2  # re-project ALL points through the robust fit
+            e2 = np.linalg.norm(al2 - pg, axis=1)
+            print(f"  -- robust refit, dropped {(~keep).sum()} residual outlier(s) --")
+            print(f"  ATE RMSE     : {np.sqrt((e2**2).mean()):.4f} m  (all {len(e2)} points, "
+                  f"refit on the {keep.sum()} inliers)")
+            print(f"  median / max : {np.median(e2):.4f} m / {e2.max():.4f} m")
+            if ws:
+                print(f"  scale        : {s2:.3f}")
 
 
 if __name__ == '__main__':

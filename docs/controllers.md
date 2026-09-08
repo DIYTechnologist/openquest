@@ -13,11 +13,15 @@ absent from the raw MCU stream (`research-notes/50`); confirmed and quantified a
 IR-LED constellation tracking fused inside `trackingservice` itself (`research-notes/55`). Since no
 LED geometry model exists or is extractable anywhere in this project, `tools/controller_tracking/`
 bootstraps one from our own stereo triangulation (no Meta data used) and tracks per-frame pose
-against it via brute-force correspondence search + PnP. **Has a first real accuracy number**
-(`research-notes/58`): **23.7 cm ATE (SE3) / 15.7 cm (Sim3) over a 3.0 m path**, against the
-controller's own live tracked pose as ground truth (`research-notes/57`). ~8% of path length —
-real, not diverged, but not yet product-quality. This tooling lives in `tools/`, not here, until
-it's proven — this component's own scope is still 3DoF + buttons.
+against it (`research-notes/56`: brute-force correspondence search; `research-notes/59`: a faster,
+temporal prior-guided search that also self-disambiguates most wrong matches once tracking is
+established). **When correspondence is correct, accuracy is sub-centimetre** (1.8-3.8 mm median,
+robust-fit) **against the controller's own live tracked pose as ground truth**
+(`research-notes/57`) — **but correspondence is only correct in ~73-74% of frames** in the best run
+so far; the remaining ~26-27% are outright wrong-correspondence outliers, not small errors
+(`research-notes/59`). Both halves of that matter — quoting either alone misrepresents it. This
+tooling lives in `tools/`, not here, until it's proven — this component's own scope is still
+3DoF + buttons.
 
 ## What it does
 
@@ -53,13 +57,17 @@ python3 components/controllers/ctl_decode.py ctl_capture.bin
 ## Known limits
 
 - No build step for `ctl_decode.py`/`ctl_run.sh` — pure Python/shell, run as-is.
-- The v1 tracker (`tools/controller_tracking/`) has no temporal/velocity consistency check in the
-  search itself — a wrong blob correspondence can still pass its reprojection threshold and produce
-  a physically impossible frame-to-frame jump, filtered out post-hoc by `controller_ate.py` rather
-  than prevented (`research-notes/58`). It is not real-time and not on-device.
-- The 23.7 cm ATE's Sim3 alignment needs scale 0.342 to fit — verified this is *not* a triangulation
-  math bug (a synthetic round-trip test recovers a known 3D point to 0.0000 mm) but real-data noise
-  or correspondence error not yet isolated further (`research-notes/58`).
+- **~26-27% of frames are still wrong-correspondence outliers**, not small errors (up to 0.93 m off)
+  — the prior-guided path's gate/reprojection thresholds are untuned first defaults
+  (`research-notes/59`). Any blob detector alone cannot distinguish the tracked controller's real
+  LEDs from another genuine IR source in view (the other controller, sitting idle, was found
+  contaminating every frame at research-notes/59) — only motion does, since the camera is fixed for
+  the whole capture; this is now filtered (`find_static_positions`/`filter_static` in
+  `blob_detect.py`) but not perfectly. Not real-time, not on-device.
+- Sim3 alignment needs scale ~0.34 to fit, consistently across two different bug-fix rounds —
+  verified this is *not* a triangulation math bug (a synthetic round-trip test recovers a known 3D
+  point to 0.0000 mm) but real correspondence-error noise, still not isolated further
+  (`research-notes/58`, `research-notes/59`).
 - Getting `/dev/video0` free for a longer/cleaner capture currently needs `trackingservice`/the
   sensors HAL stopped, and as of `research-notes/55` those no longer reliably stay stopped — open,
   undiagnosed, hit again in `research-notes/56`/`58` via a different capture path.

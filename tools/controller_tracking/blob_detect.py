@@ -48,6 +48,59 @@ def find_blobs(img, thresh=DEFAULT_THRESH, min_area=MIN_AREA, max_area=MAX_AREA)
     return np.array(out) if out else np.zeros((0, 4))
 
 
+def find_static_positions(frame_reader, frame_rows, sample_n=15, tol=3.0, min_frac=0.7,
+                           detect_kwargs=None):
+    """Positions that recur, essentially unmoved, across most of a spread of sampled frames --
+    the signature of a fixed IR source in the scene (research-notes/58 found this the hard way: a
+    5-blob cluster sat at the same pixel position for an entire ~500-frame, 20s capture, almost
+    certainly the OTHER controller sitting idle in view rather than the one actually being tracked
+    and moved -- both controllers can be lit and visible at once). A blob detector alone cannot
+    tell "real LED" from "someone else's real LED that isn't the one we're tracking"; only motion
+    can, since the camera itself is fixed for the whole capture (desk-mounted, proximity-bypassed).
+
+    frame_reader(row) -> HxW grayscale image or None.
+    Returns an (N,2) array of static (u, v) positions to exclude via filter_static.
+    """
+    detect_kwargs = detect_kwargs or {}
+    idxs = np.linspace(0, len(frame_rows) - 1, min(sample_n, len(frame_rows))).astype(int)
+    all_pts = []
+    for i in idxs:
+        im = frame_reader(frame_rows[i])
+        if im is None:
+            continue
+        b = find_blobs(im, **detect_kwargs)
+        if len(b):
+            all_pts.append(b[:, :2])
+    if len(all_pts) < 3:
+        return np.zeros((0, 2))
+
+    pts = np.concatenate(all_pts, axis=0)
+    static = []
+    used = np.zeros(len(pts), dtype=bool)
+    for i in range(len(pts)):
+        if used[i]:
+            continue
+        d = np.linalg.norm(pts - pts[i], axis=1)
+        group = d < tol
+        # A real static source is seen in most sampled frames, not just clustered within one --
+        # count DISTINCT source frames represented, not raw point count (one frame can contribute
+        # more than one nearby point if a blob is detected as two adjacent components).
+        frac = group.sum() / len(all_pts)
+        if frac >= min_frac:
+            static.append(pts[group].mean(axis=0))
+            used |= group
+    return np.array(static) if static else np.zeros((0, 2))
+
+
+def filter_static(blobs, static_positions, tol=5.0):
+    """Drop detected blobs within tol pixels of any known-static position."""
+    if len(static_positions) == 0 or len(blobs) == 0:
+        return blobs
+    d = np.linalg.norm(blobs[:, None, :2] - static_positions[None, :, :], axis=2)
+    keep = d.min(axis=1) > tol
+    return blobs[keep]
+
+
 if __name__ == '__main__':
     import sys
     im = cv2.imread(sys.argv[1], cv2.IMREAD_GRAYSCALE)
