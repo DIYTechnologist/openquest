@@ -18,7 +18,10 @@ own step 6 once it became clear "Monado as OpenXR runtime" was hiding a large wo
   replacement stack inherits it for free, nothing to implement (`research-notes/46`).
 - **Display clock**: `0x55` (vsync) is on the same IMU clock as everything else
   (`research-notes/47`), which is what timing needs — but *attributing* an injected pose to a
-  specific displayed frame (motion-to-photon) is not yet done; see `docs/tracking.md`.
+  specific displayed frame (motion-to-photon) is not yet done; see `docs/tracking.md`. **Checked
+  and blocked in software** (`research-notes/62`): `/dev/graphics/fb0` mmaps but is never written by
+  the real compositor (this device composites via Qualcomm overlay ioctls, not fbdev pan-flip), and
+  `screencap` is explicitly refused by SurfaceFlinger as a protected display. Needs a photodiode.
 
 ## Why this matters now, not just at the OS swap
 

@@ -111,3 +111,4 @@ tools/cam_kernel/.kinc/
 # Bring-up probe binaries, trivially rebuilt with the NDK one-liner in each's own header comment.
 tools/controller_tracking/controller_pose_log
 tools/controller_tracking/remote_pose_probe
+tools/motion_to_photon/fb_probe

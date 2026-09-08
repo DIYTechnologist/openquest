@@ -58,7 +58,11 @@ adb push components/tracking/vio_live /data/local/tmp/
 
 - Motion-to-photon latency (attributing an injected pose to a displayed frame, not just to
   `dumpsys`) is unmeasured. `research-notes/47` established display vsync is on the IMU clock, which
-  is what timing needs, but the attribution itself is still open.
+  is what timing needs, but the attribution itself is still open — and, per `research-notes/62`,
+  **not achievable in software on this device**: `/dev/graphics/fb0` mmaps successfully but is never
+  written by the real compositor (all zero, checked exhaustively), and `screencap` is explicitly
+  refused by SurfaceFlinger (`FB is protected: PERMISSION_DENIED`). Closing this needs external
+  hardware (a photodiode timestamped on the same nRF clock), not more software probing.
 - Static-only on-device init (above) means a room-scale capture that starts already in motion, or
   facing a blank/close surface, will fail to track — this was the exact root cause resolved offline
   in `research-notes/53` and is not yet ported into `vio_live` itself.
