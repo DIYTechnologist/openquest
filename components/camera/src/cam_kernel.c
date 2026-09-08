@@ -791,7 +791,16 @@ int main(int argc, char **argv) {
 
   if (mcu_open_and_power() < 0) return 1;
   usleep(200000);
-  mcu_configure(ncam, exposure, gain);
+  // mcu_configure() ORs five sb_send/sb_prop results together, including the IMU-enable packet
+  // (0x6e). Ignoring it used to mean a dropped IMU-enable produced a capture with camera frames
+  // but no 0x50 records, exiting 0 as if successful -- discovered only once the dataset reached
+  // build_euroc_leech.py, after the worn-headset session was already gone (research-notes/54).
+  if (mcu_configure(ncam, exposure, gain) < 0) {
+    fprintf(stderr, "[-] mcu_configure failed (see sb_send/sb_prop lines above) -- aborting rather "
+                     "than capture a session with silently missing IMU or camera config\n");
+    mcu_stop();
+    return 1;
+  }
 
   ion_fd = open("/dev/ion", O_RDONLY);
   if (ion_fd < 0) { perror("open /dev/ion"); mcu_stop(); return 1; }
@@ -805,7 +814,17 @@ int main(int argc, char **argv) {
   for (int i = 0; i < ncam; i++)
     if (bringup_camera(&cams[i], i, &sd, ispif_fd) == 0) up++;
   printf("[%c] %d/%d camera pipelines up\n", up == ncam ? '+' : '-', up, ncam);
-  if (!up) { mcu_stop(); return 1; }
+  // Fail-fast on ANY partial bring-up, not just up==0. The DQBUF loop and teardown below both
+  // iterate i<ncam unconditionally regardless of which cameras actually came up -- a partially-up
+  // run used to exit 0 with one camera's data simply missing (research-notes/54), which is worse
+  // than an honest failure: it looks like a good capture until something downstream (VIO, the
+  // controller tracker) notices a camera's stream is empty or short.
+  if (up != ncam) {
+    fprintf(stderr, "[-] only %d/%d camera pipelines came up -- aborting rather than run with one "
+                     "silently missing\n", up, ncam);
+    mcu_stop();
+    return 1;
+  }
 
   // Acceptance criterion (notes/18 step 1): prove no Meta userspace library is MAPPED, not merely
   // unused. Checked here, with the whole pipeline live, because a lazily-dlopened blob would only

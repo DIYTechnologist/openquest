@@ -70,16 +70,11 @@ inside a fresh container surfaces failures a long-lived host environment had pap
 An independent review of the moved/adjacent code turned up five real, still-open issues. Recorded
 here rather than fixed now:
 
-1. **`components/camera/src/cam_kernel.c:781`** — `mcu_configure()`'s return value (which ORs
-   together five `sb_send`/`sb_prop` results, including the IMU-enable packet) is discarded. A
-   dropped IMU-enable leaves a capture with camera frames but no `0x50` IMU records, exiting 0 as if
-   successful, discovered only when the dataset reaches `build_euroc_leech.py` or `vio_live` — after
-   a worn-headset session is already gone.
-2. **`components/camera/src/cam_kernel.c:792`** — partial camera bring-up (e.g. 3-of-4) isn't
-   fail-fast: only `up == 0` aborts. The poll/DQBUF loop and teardown both iterate `i < ncam`
-   unconditionally. Traced the actual failure paths: not memory-unsafe (`cams[]` is zero-init
-   static, and stray fds fail `poll`/`ioctl` benignly), but a real silent-degradation + fd/ION leak
-   bug — a partially-up run exits 0 with one camera's data simply missing.
+1. ~~**`components/camera/src/cam_kernel.c:781`** — `mcu_configure()`'s return value discarded.~~
+   **Fixed** (2026-09-08): `main()` now checks it and aborts (with `mcu_stop()`) rather than
+   proceeding with a possibly-dropped IMU-enable.
+2. ~~**`components/camera/src/cam_kernel.c:792`** — partial camera bring-up not fail-fast.~~
+   **Fixed** (2026-09-08): aborts on `up != ncam`, not just `up == 0`.
 3. **`tools/vio/build_euroc_leech.py:183`** — a short/missing frame read `continue`s past writing
    just that one camera's row, not the whole stereo pair, so `cam0/data.csv` and `cam1/data.csv` can
    silently diverge in row count and timestamps from one corrupt frame onward.
