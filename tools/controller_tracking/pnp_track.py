@@ -128,14 +128,23 @@ def track_frame_prior(model_pts, blobs_dirs, R_prev, t_prev, gate, min_blobs, re
     return res
 
 
-def track_frame(model_pts, blobs_dirs, min_blobs, reproj_thresh, max_k=5):
+def track_frame(model_pts, blobs_dirs, min_blobs, reproj_thresh, max_k=5, motion_prior=None):
     """Brute-force correspondence search: try every way to pick and order min(len(model),
     len(blobs), max_k) of the detected blobs against that many model points, keep the lowest-error
     solve_pose result under threshold. permutations(n, k) is factorial in k as well as n --
     growing the model from 5 to 7 points (research-notes/58's static-source fix) made k=7 blow up
     the same way n=16 did before --max-blobs existed. max_k=5 is already enough points for a
     well-constrained PnP solve; this only bounds the SEARCH, not how many correspondences a solved
-    frame can eventually use once the prior-guided path takes over."""
+    frame can eventually use once the prior-guided path takes over.
+
+    motion_prior = (t_prev, max_speed, dt), all in camera-A frame/seconds -- research-notes/61
+    found brute-force reacquisitions are ~6x more likely to be wrong than prior-guided frames
+    (31% vs 5.4% outlier rate), all with LOW reprojection error: a wrong correspondence can be
+    perfectly self-consistent and still be geometrically wrong, since nothing about reprojection
+    error alone checks it against anything outside the current frame. When a recent prior exists,
+    prefer the lowest-error candidate that's ALSO within a plausible displacement of it, falling
+    back to lowest-error-overall only when no candidate qualifies (a genuine reacquisition after
+    real track loss shouldn't be blocked by this)."""
     m = len(model_pts)
     n = len(blobs_dirs)
     if n < min_blobs or m < 4:
@@ -148,7 +157,13 @@ def track_frame(model_pts, blobs_dirs, min_blobs, reproj_thresh, max_k=5):
     # blob permutations (which encode the actual unknown correspondence) do.
     model_subsets = list(itertools.islice(
         itertools.combinations(range(m), k) if k < m else [tuple(range(m))], 8))
-    best = None
+    max_disp = None
+    if motion_prior is not None:
+        t_prev, max_speed, dt = motion_prior
+        max_disp = max_speed * dt
+
+    best = None          # lowest-error overall, the old behaviour, used as fallback
+    best_consistent = None  # lowest-error among candidates near the motion prior
     for blob_subset in itertools.permutations(range(n), k):
         for model_subset in model_subsets:
             obj = model_pts[list(model_subset)]
@@ -157,9 +172,14 @@ def track_frame(model_pts, blobs_dirs, min_blobs, reproj_thresh, max_k=5):
             if res is None:
                 continue
             R, t, err = res
-            if err < reproj_thresh and (best is None or err < best[2]):
+            if err >= reproj_thresh:
+                continue
+            if best is None or err < best[2]:
                 best = (R, t, err)
-    return best
+            if max_disp is not None and np.linalg.norm(t - t_prev) <= max_disp:
+                if best_consistent is None or err < best_consistent[2]:
+                    best_consistent = (R, t, err)
+    return best_consistent if best_consistent is not None else best
 
 
 def main():
@@ -184,6 +204,10 @@ def main():
                      help='prior-guided match gate, normalized-bearing units. See --reproj-thresh.')
     ap.add_argument('--max-prior-gap-s', type=float, default=0.5,
                      help='do not trust the prior across a gap longer than this (camera clock)')
+    ap.add_argument('--max-speed', type=float, default=3.0,
+                     help='m/s, plausible hand-motion bound used both to sanity-check '
+                          'brute-force reacquisitions against the last known pose '
+                          '(research-notes/61) and by controller_ate.py post-hoc')
     args = ap.parse_args()
 
     c = json.load(open(args.calib))['value0']
@@ -244,7 +268,11 @@ def main():
             if res is not None:
                 method = 'prior'
         if res is None:
-            res = track_frame(model_pts, dirs, args.min_blobs, args.reproj_thresh)
+            motion_prior = None
+            if prev is not None and (r['ts'] - prev[2]) * 1e-9 <= args.max_prior_gap_s:
+                motion_prior = (prev[1], args.max_speed, (r['ts'] - prev[2]) * 1e-9)
+            res = track_frame(model_pts, dirs, args.min_blobs, args.reproj_thresh,
+                               motion_prior=motion_prior)
             if res is not None:
                 method = 'brute'
         if res is None:

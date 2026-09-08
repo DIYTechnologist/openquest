@@ -66,6 +66,14 @@ python3 components/controllers/ctl_decode.py ctl_capture.bin
   `research-notes/59`) — only motion does, since the camera is fixed for the whole capture; this is
   filtered (`find_static_positions`/`filter_static` in `blob_detect.py`) but not perfectly. Not
   real-time, not on-device.
+- **The outliers are concentrated, not scattered**: one sustained ~7s window (over a third of the
+  validation capture) where the tracker never lands on a correct correspondence at all, and each
+  wrong frame is self-consistent with the previous (also wrong) frame — a "drift-lock" that a
+  previous-frame-only motion sanity check (tried, `research-notes/61`) cannot catch. Not caused by
+  fewer/dimmer blobs (checked, unremarkable through the window). Leading hypothesis, unconfirmed:
+  geometric ambiguity from having no per-LED identity (position only, no blink/timing code) —
+  fixing it for real likely needs LED identity decoding or genuine uncertainty-tracking temporal
+  filtering, not another threshold tweak.
 - Sim3 alignment needs scale ~0.34 to fit, consistently across three different bug-fix/tuning rounds
   — verified this is *not* a triangulation math bug (a synthetic round-trip test recovers a known 3D
   point to 0.0000 mm). One concrete hypothesis (a lever-arm/reference-point mismatch between our
