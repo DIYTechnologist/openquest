@@ -12,15 +12,20 @@
 FROM ubuntu:20.04
 ENV DEBIAN_FRONTEND=noninteractive TZ=UTC
 
-# Standard AOSP/LineageOS host build dependency list.
+# Standard AOSP/LineageOS host build dependency list, plus git-lfs: some LineageOS projects
+# (e.g. external/chromium-webview/prebuilt/*) store their actual blob content via Git LFS, and
+# without the filter registered `repo sync` fails to check them out with an opaque "Cannot
+# initialize work tree" error that names the project but not the real cause -- found the hard way
+# on the first sync attempt, not anticipated up front.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
-      git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev \
+      git git-lfs gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev lib32z1-dev \
       liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils \
       lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
       python3 python-is-python3 unzip fontconfig ca-certificates openssh-client \
       openjdk-17-jdk-headless \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && git lfs install --system
 
 # The `repo` launcher, not a distro package -- Google's own tool, fetched once and pinned by
 # content (the script itself is small and stable; if Google rotates it, a rebuild picks up the new

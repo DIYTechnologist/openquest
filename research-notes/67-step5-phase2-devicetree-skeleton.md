@@ -38,8 +38,19 @@ targets, all container-wrapped via the same `container.mk` every other component
 recommendation for device bring-up rather than every branch's full history; `--no-clone-bundle`:
 this project has hit CDN/network flakiness on large transfers before, `research-notes/32`'s UFS
 wedge investigation, so preferring the slower but more resumable plain-fetch path was deliberate,
-not default). **Still running as of this note** — 25GB and climbing steadily after the first ~10
-minutes, no errors.
+not default).
+
+**First attempt failed at ~31GB**, four projects only: `external/chromium-webview/prebuilt/{arm,
+arm64,x86,x86_64}`, with an opaque `Cannot initialize work tree for ...` error that named the
+project but not the real cause. Diagnosed directly rather than retried blind: each had only
+`.gitattributes`/`.lfsconfig` checked out, no actual content — **these four projects store their
+blobs via Git LFS** (`*.apk filter=lfs`), and the container's Dockerfile never installed `git-lfs`,
+so the checkout's smudge filter had nowhere to run. Not a disk-space or inode issue (494GB free,
+checked directly rather than assumed). Fixed: added `git-lfs` to the container's apt install list
+plus `git lfs install --system` at image-build time (so the filter is registered in the image layer
+itself, not lost to the container's per-invocation ephemeral filesystem the way a per-run `git lfs
+install` would be); rebuilt the image; resumed `repo sync` — **running again as of this note**,
+picking up cleanly from the already-synced ~31GB rather than restarting from zero.
 
 ## First device tree draft — real, but explicitly UNTESTED
 

@@ -44,11 +44,13 @@ make -C components/kernel               # build the kernel components/os will co
 make -C components/os lunch             # device-tree-link + kernel-prebuilt + lunch + build
 ```
 
-Needs the `quest-lineageos-build` container (Ubuntu 20.04, OpenJDK 17, `repo` — `build/containers/
-lineageos-build/`; Ubuntu 20.04 specifically because AOSP's documented host package list was
-dropped from 22.04's repos, the same reasoning as the kernel container's pinned GCC 4.9) and real
-disk space: a LineageOS source sync plus build output needs 250-400GB, checked explicitly before
-starting rather than assumed available.
+Needs the `quest-lineageos-build` container (Ubuntu 20.04, OpenJDK 17, `repo`, `git-lfs` —
+`build/containers/lineageos-build/`; Ubuntu 20.04 specifically because AOSP's documented host
+package list was dropped from 22.04's repos, the same reasoning as the kernel container's pinned
+GCC 4.9; `git-lfs` because some LineageOS projects, e.g. `external/chromium-webview/prebuilt/*`,
+store blobs via Git LFS and the first sync attempt failed opaquely without it) and real disk space:
+a LineageOS source sync plus build output needs 250-400GB, checked explicitly before starting
+rather than assumed available.
 
 ## Known limits
 
