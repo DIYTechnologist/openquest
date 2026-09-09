@@ -13,7 +13,11 @@ own step 6 once it became clear "Monado as OpenXR runtime" was hiding a large wo
   flash (`research-notes/44`).
 - **Distortion**: Meta's per-eye distortion mesh is decoded (`tools/display/decode_distortion_mesh.py`)
   and converted to a Monado-consumable sampler format (`tools/display/mesh_to_monado.py`)
-  (`research-notes/42`).
+  (`research-notes/42`). The converter's own fidelity is verified (`tools/display/verify_mesh_conversion.py`,
+  `research-notes/63`): exact-vertex round-trip to 0.00067px, bilinear-vs-bicubic interpolation
+  sensitivity 0.3-7.4px. **Absolute accuracy against Meta's real optics is unverifiable** — no
+  independent lens calibration exists in this project, and a live comparison render is blocked by
+  the same wall as motion-to-photon (below).
 - **Persistence**: low persistence appears to be panel-native — no software path drives it, so a
   replacement stack inherits it for free, nothing to implement (`research-notes/46`).
 - **Display clock**: `0x55` (vsync) is on the same IMU clock as everything else
