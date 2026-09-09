@@ -84,3 +84,49 @@ lunch: kernel-prebuilt device-tree-link
 	cd $(LINEAGEOS_DIR) && $(BUILD_ENV) bash -c \
 	  'source build/envsetup.sh && lunch lineage_monterey-ap2a-userdebug && make bootimage systemimage -j$(BUILD_JOBS)'
 endif
+
+# --- lineage-18.1 (Android 11) bring-up reference build, research-notes/74 -------------------
+#
+# A SEPARATE tree and container from everything above: validates this kernel's real requirement
+# (the old monolithic/system-as-root ramdisk, BOARD_BUILD_SYSTEM_ROOT_IMAGE -- obsolete on
+# lineage-21) on an AOSP version old enough to still natively support it, before hand-building an
+# equivalent ramdisk for the lineage-21 tree. container.mk's wrapper only supports one
+# CONTAINER_IMAGE for the whole file, so these targets invoke podman directly with the -18
+# container instead of going through it -- an explicit rule with its own recipe takes precedence
+# over container.mk's generic `%:` pattern rule regardless of include order.
+LINEAGEOS18_DIR := $(REPO_ROOT)/work/lineageos18
+CONTAINER18 := podman run --rm -v $(REPO_ROOT):$(REPO_ROOT):Z -w $(LINEAGEOS18_DIR) quest-lineageos18-build
+BUILD_ENV18 := HOME=$(LINEAGEOS18_DIR)/.home \
+               GIT_AUTHOR_NAME="Quest OS Build" GIT_AUTHOR_EMAIL="quest-build@localhost" \
+               GIT_COMMITTER_NAME="Quest OS Build" GIT_COMMITTER_EMAIL="quest-build@localhost"
+
+.PHONY: init-18 sync-18 lfs-pull-18 device-tree-link-18 kernel-prebuilt-18 lunch-18
+
+init-18:
+	mkdir -p $(LINEAGEOS18_DIR) $(LINEAGEOS18_DIR)/.home
+	$(CONTAINER18) bash -c '$(BUILD_ENV18) repo init -u https://github.com/LineageOS/android.git -b lineage-18.1'
+
+sync-18:
+	$(CONTAINER18) bash -c '$(BUILD_ENV18) repo sync -c -j4 --no-clone-bundle --force-sync'
+	$(MAKE) lfs-pull-18
+
+lfs-pull-18:
+	$(CONTAINER18) bash -c 'for d in $(LFS_DIRS); do (cd "$$d" && git lfs pull) || true; done'
+
+device-tree-link-18:
+	mkdir -p $(LINEAGEOS18_DIR)/device/oculus
+	rm -rf $(LINEAGEOS18_DIR)/device/oculus/monterey
+	cp -rs $(REPO_ROOT)/components/os/device-monterey-18 $(LINEAGEOS18_DIR)/device/oculus/monterey
+
+# Same patched kernel as the lineage-21 tree -- one source of truth, copied into this tree's own
+# device-monterey-18/prebuilt/ (kept separate from device-monterey/prebuilt/ so the two trees'
+# device-tree-link targets never race or overwrite each other).
+kernel-prebuilt-18:
+	mkdir -p $(REPO_ROOT)/components/os/device-monterey-18/prebuilt
+	python3 $(REPO_ROOT)/components/os/patch_legacysar_kernel.py \
+	   $(REPO_ROOT)/components/kernel/build/out/arch/arm64/boot/Image.gz-dtb \
+	   $(REPO_ROOT)/components/os/device-monterey-18/prebuilt/Image.gz-dtb
+
+lunch-18: kernel-prebuilt-18 device-tree-link-18
+	$(CONTAINER18) bash -c \
+	  '$(BUILD_ENV18) bash -c "source build/envsetup.sh && lunch lineage_monterey-userdebug && make bootimage systemimage -j$(BUILD_JOBS)"'
