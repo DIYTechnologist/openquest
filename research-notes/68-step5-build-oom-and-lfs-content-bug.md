@@ -1,8 +1,42 @@
-# Step 5 build: three real bugs found close to the finish line — OOM at -j16, silent LFS pointers, hex partition sizes — 2026-09-09
+# Step 5 build: eight real bugs from first draft to 92% — config, OOM, silent LFS pointers, hex partition sizes — 2026-09-09
 
-Continuation of `research-notes/67` on the same build. The device tree itself has been valid and
-building since that note (confirmed by reaching real compilation, not stuck on config). Two more
-real issues surfaced on the way to actually finishing, both diagnosed from direct evidence.
+Continuation of `research-notes/67` on the same build. Eight real issues surfaced across the first
+real build attempts, in order: five in getting the device tree recognized and configured at all
+(quick, mechanical), then three more deep in actual compilation (this note's main content). All
+diagnosed from direct evidence, not guessed.
+
+## Five bugs getting from "device tree drafted" to "device tree actually builds"
+
+Not yet written up anywhere until now — found and fixed inline during the first `make -C
+components/os lunch` attempts, in order:
+
+1. **`add_lunch_combo` is obsolete** on this AOSP version (`vendorsetup.sh`) — `COMMON_LUNCH_CHOICES`
+   in `AndroidProducts.mk` already covers it; the file is now deliberately empty with a comment
+   explaining why, kept only so the usual `source device/oculus/monterey/vendorsetup.sh` convention
+   still finds something there.
+2. **Lunch combos need the newer three-part `<product>-<release>-<variant>` form**, and the release
+   name is this manifest's own `ap2a`, not AOSP's generic example release `trunk_staging` (the error
+   itself named the valid option: `Available releases are: ap2a`).
+3. **`PRODUCT_MAKEFILES` needs `<name>:<path>`**, not a bare path, on this AOSP version — confirmed
+   by comparing against a real in-tree device (`device/google/cuttlefish/AndroidProducts.mk`) after
+   the bare-path form silently resolved to nothing (`Cannot locate config makefile for product
+   'lineage_monterey'`).
+4. **The device tree was invisible to Soong's Finder entirely.** `device/oculus/monterey` was
+   originally a single directory symlink into `components/os/device-monterey`; Soong's Finder
+   (`build/soong/finder/finder.go`) only follows symlinked *files*, not symlinked *directories*,
+   unless `FollowSymlinks` is set (default off, a deliberate anti-infinite-loop safeguard) —
+   confirmed directly in that file's source, not inferred. Fixed by making
+   `device/oculus/monterey` a real directory with each individual file symlinked back
+   (`cp -rs`, `components/os/Makefile`'s `device-tree-link` target) instead of symlinking the whole
+   directory.
+5. **`dex_preopt_check.mk` failed hard** on missing `.odex`/`.vdex` artifacts for
+   `org.lineageos.platform` once the tree was recognized and building — a real check, just not
+   relevant to Phase 2's "boot to a shell" milestone. Fixed with `WITH_DEXPREOPT := false` in
+   `device.mk`.
+
+With those four fixed, the device tree reached real compilation — confirmed by 100% of legacy Make
+module parsing completing cleanly. Three more issues surfaced from there, all deep in actual
+compilation rather than configuration.
 
 ## Bug 1: `-j16` (the host's full thread count) caused a genuine host-wide OOM kill
 
