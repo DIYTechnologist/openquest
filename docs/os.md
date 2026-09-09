@@ -7,12 +7,16 @@ LineageOS source it builds against.
 
 ## Status
 
-**Just started, 2026-09-09** (`research-notes/65`-`67`). Prerequisite work done: the bootloader is
-confirmed genuinely unlocked (QuestStack/CVE-2021-1931, `fastboot getvar unlocked:yes`,
-`research-notes/65`) and the unlocked flash/boot loop is validated clean (`research-notes/66`). A
-first `device/oculus/monterey/` draft exists (`research-notes/67`) but **has not been through a
-real build** — the LineageOS source sync it depends on was still running when it was written.
-Expect real iteration once a build attempt can actually produce errors to fix.
+**First successful build, 2026-09-09** (`research-notes/65`-`69`). Prerequisite work done: the
+bootloader is confirmed genuinely unlocked (QuestStack/CVE-2021-1931, `fastboot getvar
+unlocked:yes`, `research-notes/65`) and the unlocked flash/boot loop is validated clean
+(`research-notes/66`). `device/oculus/monterey/` now builds real, valid `boot.img`/`system.img`
+artifacts against LineageOS 21 (`research-notes/69`), after eight real bugs found and fixed
+(`research-notes/68`) — five in getting the device tree recognized/configured at all, three deep in
+compilation (a genuine host-wide OOM at full parallelism, silently-unfetched Git-LFS content, and a
+hex-vs-decimal parsing bug in `BoardConfig.mk`). **Not yet flashed to the device** — that's real,
+meaningfully greater risk than anything before it (a from-scratch OS, not a known-good re-flash) and
+needs fresh-verified backups plus explicit confirmation first.
 
 ## What it does (once real)
 
@@ -54,7 +58,8 @@ rather than assumed available.
 
 ## Known limits
 
-- Untested end to end — see Status above.
+- Builds real `boot.img`/`system.img` (`research-notes/69`) but **never booted on real hardware** —
+  see Status above.
 - `PRODUCT_FULL_TREBLE_OVERRIDE` deliberately left unset rather than asserted true (unlike the
   reference devices), since full Treble conventionally assumes a real vendor partition this device
   doesn't have. Open item, not resolved.
