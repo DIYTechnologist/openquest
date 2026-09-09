@@ -47,7 +47,10 @@ Needs `work/oculus-kernel` (Meta's published GPLv2 source) and `recon/config.gz`
 
 - Flashing an instrumented build carries real risk — one flash attempt failed to boot and required
   a full recovery (`research-notes/21`); always keep a verified `boot_a` backup first
-  (`backups/boot-monterey/`).
+  (`backups/boot-monterey/`). **The bootloader is now genuinely unlocked** (`fastboot getvar
+  unlocked:yes`, `research-notes/65`), not the earlier cosmetic-tolerance state — the flash/boot
+  loop itself is validated clean under it (`research-notes/66`), which lowers this risk somewhat,
+  but flashing new kernel content is still real risk, not eliminated risk.
 - This is not yet a mainlined or LineageOS-portable kernel; it is Meta's own tree with minimal,
   documented deviations, which is deliberate for now (`research-notes/18` step 5: "mainlining is not
   a prerequisite, though it is the cleaner end state").
