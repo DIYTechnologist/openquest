@@ -112,3 +112,6 @@ tools/cam_kernel/.kinc/
 tools/controller_tracking/controller_pose_log
 tools/controller_tracking/remote_pose_probe
 tools/motion_to_photon/fb_probe
+
+# copied in by components/os's kernel-prebuilt target from components/kernel's own build output.
+components/os/device-monterey/prebuilt/
