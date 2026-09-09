@@ -56,10 +56,16 @@ device-tree-link:
 	cp -rs $(REPO_ROOT)/components/os/device-monterey $(LINEAGEOS_DIR)/device/oculus/monterey
 
 # One source of truth for the kernel build (components/kernel, its own container/toolchain) --
-# this just copies the already-built output in, matching device.mk's TARGET_PREBUILT_KERNEL path.
+# this copies the already-built output in, matching device.mk's TARGET_PREBUILT_KERNEL path, then
+# hexpatches it for this device's legacy system-as-root requirement (research-notes/21, /71): the
+# stock kernel always skips the boot.img ramdisk unless skip_initramfs is hexpatched to
+# want_initramfs. components/kernel's own build has never carried this (it boots today only via
+# Magisk separately applying the same patch through magiskboot's LEGACYSAR path) -- for a from-
+# scratch AOSP-generated ramdisk, nothing else applies it, so it has to happen here.
 kernel-prebuilt:
 	mkdir -p $(REPO_ROOT)/components/os/device-monterey/prebuilt
-	cp $(REPO_ROOT)/components/kernel/build/out/arch/arm64/boot/Image.gz-dtb \
+	python3 $(REPO_ROOT)/components/os/patch_legacysar_kernel.py \
+	   $(REPO_ROOT)/components/kernel/build/out/arch/arm64/boot/Image.gz-dtb \
 	   $(REPO_ROOT)/components/os/device-monterey/prebuilt/Image.gz-dtb
 
 # Phase 2 milestone (research-notes/18 step 5): lunch + a bootimage/systemimage build, nothing more
