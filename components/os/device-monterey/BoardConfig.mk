@@ -31,10 +31,15 @@ TARGET_USES_GRALLOC1 := true
 BOARD_KERNEL_IMAGE_NAME := Image.gz-dtb
 BOARD_KERNEL_BASE := 0x00000000
 BOARD_KERNEL_PAGESIZE := 4096
-# Deliberately minimal cmdline -- no androidboot.veritymode (verity/AVB both off, see below), no
-# telephony/RIL-related flags the reference devices carry. Will very likely need real additions
-# once boot is actually attempted and something in early init needs a flag this doesn't have yet.
-BOARD_KERNEL_CMDLINE := androidboot.hardware=qcom androidboot.configfs=true loop.max_part=7
+# androidboot.hardware=monterey, not the generic "qcom" reference-tree value: unpacked the LIVE
+# stock boot_a with unpack_bootimg for a direct comparison (research-notes/73) and found this is
+# the single most device-specific divergence in the whole cmdline. androidboot.hardware selects
+# which init.<hardware>.rc gets parsed, and this device's bootloader carries custom OEM extensions
+# (`oculus-ext-version:2`, research-notes/65) -- plausible this matters earlier than just init.
+# Still deliberately minimal otherwise: no androidboot.veritymode (verity/AVB both off), no
+# telephony/RIL flags -- isolating one variable at a time rather than copying stock's cmdline
+# wholesale, same discipline research-notes/21 already established for this device.
+BOARD_KERNEL_CMDLINE := androidboot.hardware=monterey androidboot.configfs=true loop.max_part=7
 
 # Partitions -- from research-notes/65's `fastboot getvar all` capture on the real device, not
 # guessed. boot_a/boot_b and system_a/system_b are A/B slotted; no vendor_a/vendor_b because there
