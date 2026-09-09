@@ -17,7 +17,7 @@ BUILD_ENV := HOME=$(LINEAGEOS_DIR)/.home \
              GIT_COMMITTER_NAME="Quest OS Build" GIT_COMMITTER_EMAIL="quest-build@localhost"
 
 ifeq ($(IN_CONTAINER),1)
-.PHONY: init sync device-tree-link kernel-prebuilt lunch
+.PHONY: init sync lfs-pull device-tree-link kernel-prebuilt lunch
 
 init:
 	mkdir -p $(LINEAGEOS_DIR) $(LINEAGEOS_DIR)/.home
@@ -29,10 +29,31 @@ init:
 # research-notes/32) -- prefer the slower but more resumable plain fetch path.
 sync:
 	cd $(LINEAGEOS_DIR) && $(BUILD_ENV) repo sync -c -j4 --no-clone-bundle --force-sync
+	$(MAKE) lfs-pull
 
+# git-lfs install --system (in the container image) registers the smudge FILTER, but that alone
+# does not guarantee repo sync's checkout actually fetches real LFS blob content -- found the hard
+# way 91% into a build (research-notes/68): the four LFS-tracked projects checked out as valid
+# 134-byte pointer files ("version https://git-lfs.github.com/spec/v1 ...", no error anywhere) and
+# only failed much later when something tried to treat the pointer text as real zip/APK content.
+# Explicit `git lfs pull` per project is the reliable way to force the actual objects down.
+LFS_DIRS := external/chromium-webview/prebuilt/arm external/chromium-webview/prebuilt/arm64 \
+            external/chromium-webview/prebuilt/x86 external/chromium-webview/prebuilt/x86_64
+lfs-pull:
+	cd $(LINEAGEOS_DIR) && for d in $(LFS_DIRS); do (cd "$$d" && git lfs pull); done
+
+# NOT a single directory symlink -- Soong's Finder (build/soong/finder/finder.go) only follows
+# symlinked FILES, not symlinked DIRECTORIES, unless FollowSymlinks is set (default off, a
+# deliberate anti-infinite-loop safeguard). A whole-dir symlink here made device/oculus/monterey
+# invisible to the product-makefile discovery scan with no error, just "Cannot locate config
+# makefile for product" -- found by checking out/.module_paths/AndroidProducts.mk.list directly
+# rather than guessing at the cause. `cp -rs` makes device/oculus/monterey a REAL directory tree
+# with each individual FILE symlinked back to components/os/device-monterey -- Finder-visible,
+# while still keeping this repo as the single source of truth for their content.
 device-tree-link:
 	mkdir -p $(LINEAGEOS_DIR)/device/oculus
-	ln -sfn $(REPO_ROOT)/components/os/device-monterey $(LINEAGEOS_DIR)/device/oculus/monterey
+	rm -rf $(LINEAGEOS_DIR)/device/oculus/monterey
+	cp -rs $(REPO_ROOT)/components/os/device-monterey $(LINEAGEOS_DIR)/device/oculus/monterey
 
 # One source of truth for the kernel build (components/kernel, its own container/toolchain) --
 # this just copies the already-built output in, matching device.mk's TARGET_PREBUILT_KERNEL path.
@@ -42,8 +63,18 @@ kernel-prebuilt:
 	   $(REPO_ROOT)/components/os/device-monterey/prebuilt/Image.gz-dtb
 
 # Phase 2 milestone (research-notes/18 step 5): lunch + a bootimage/systemimage build, nothing more
-# yet. Needs device-tree-link and kernel-prebuilt to have been run first.
-lunch: device-tree-link kernel-prebuilt
+# yet. kernel-prebuilt MUST run before device-tree-link: it places Image.gz-dtb inside
+# components/os/device-monterey/prebuilt/ in the SOURCE tree, and device-tree-link's `cp -rs` only
+# picks up files that already exist there at the time it runs.
+#
+# BUILD_JOBS defaults to 8, not $(nproc) (16 on this host): a first attempt at -j16 hit a real,
+# confirmed host-wide OOM kill (journalctl -k: "oom-kill ... task=ninja", triggered by desktop
+# memory pressure competing with the build, not a hard "this build needs more than 30GB" ceiling --
+# several of ninja's concurrent build actions here are JVM processes, kotlinc/R8/javac, that can
+# each spike a few GB, so -j16 means up to 16 of those concurrently). Override on the command line
+# (`make -C components/os lunch BUILD_JOBS=N`) if running on a host with more headroom.
+BUILD_JOBS ?= 8
+lunch: kernel-prebuilt device-tree-link
 	cd $(LINEAGEOS_DIR) && $(BUILD_ENV) bash -c \
-	  'source build/envsetup.sh && lunch lineage_monterey-userdebug && make bootimage systemimage -j$$(nproc)'
+	  'source build/envsetup.sh && lunch lineage_monterey-ap2a-userdebug && make bootimage systemimage -j$(BUILD_JOBS)'
 endif

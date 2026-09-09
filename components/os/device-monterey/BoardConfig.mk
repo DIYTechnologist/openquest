@@ -40,8 +40,12 @@ BOARD_KERNEL_CMDLINE := androidboot.hardware=qcom androidboot.configfs=true loop
 # guessed. boot_a/boot_b and system_a/system_b are A/B slotted; no vendor_a/vendor_b because there
 # is no separate vendor partition at all (research-notes/16/65) -- vendor content lives inside
 # system.img, hence TARGET_COPY_OUT_VENDOR below rather than the reference devices' `vendor`.
-BOARD_BOOTIMAGE_PARTITION_SIZE := 0x4000000
-BOARD_SYSTEMIMAGE_PARTITION_SIZE := 0xA0000000
+# Decimal, not the 0x... form fastboot printed: build_image.py's verity_utils.py parses this field
+# with int(s, base=10), which rejects a "0x" prefix outright -- found 92% into a build
+# (research-notes/68) via a plain ValueError, not a hex-vs-decimal issue anywhere else in the
+# toolchain (BOARD_KERNEL_BASE stays hex; nothing downstream of it hit this same parser).
+BOARD_BOOTIMAGE_PARTITION_SIZE := 67108864    # 0x4000000
+BOARD_SYSTEMIMAGE_PARTITION_SIZE := 2684354560  # 0xA0000000
 BOARD_FLASH_BLOCK_SIZE := 0x40000
 TARGET_USERIMAGES_USE_EXT4 := true
 TARGET_COPY_OUT_VENDOR := system/vendor

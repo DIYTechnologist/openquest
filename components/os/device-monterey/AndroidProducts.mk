@@ -4,9 +4,12 @@
 # structural reference only -- not forked, since both assume a phone (modem/RIL, touchscreen,
 # separate vendor partition) monterey doesn't have.
 
+# <product_name>:<path> -- a bare path isn't enough on this AOSP version (checked against a real
+# in-tree example, device/google/cuttlefish/AndroidProducts.mk, after the bare-path form silently
+# failed to resolve with "Cannot locate config makefile for product 'lineage_monterey'").
 PRODUCT_MAKEFILES := \
-    $(LOCAL_DIR)/lineage_monterey.mk
+    lineage_monterey:$(LOCAL_DIR)/lineage_monterey.mk
 
 COMMON_LUNCH_CHOICES := \
-    lineage_monterey-userdebug \
-    lineage_monterey-user
+    lineage_monterey-ap2a-userdebug \
+    lineage_monterey-ap2a-user

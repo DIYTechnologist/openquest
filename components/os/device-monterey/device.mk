@@ -6,6 +6,12 @@ LOCAL_PATH := device/oculus/monterey
 PRODUCT_SHIPPING_API_LEVEL := 34
 TARGET_SUPPORTS_64_BIT_APPS := true
 
+# Dexpreopt (ahead-of-time system-server jar compilation) is a release-optimisation step, not
+# something the Phase 2 "boot to a shell" milestone needs. Left on, the build's own
+# dex_preopt_check.mk sanity check fails hard on missing .odex/.vdex artifacts for
+# org.lineageos.platform -- a real check, just not relevant yet at this stage of bring-up.
+WITH_DEXPREOPT := false
+
 # Kernel: TARGET_PREBUILT_KERNEL, not TARGET_KERNEL_SOURCE. Unlike the motorola/nokia reference
 # trees (which build kernel/<oem>/msm8998 as part of the AOSP tree), monterey's kernel is
 # components/kernel -- its own independently-buildable component with its own pinned AOSP GCC 4.9
