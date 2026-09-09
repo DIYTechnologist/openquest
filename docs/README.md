@@ -12,7 +12,7 @@ order starting from `research-notes/52-CHECKPOINT-ate-controllers-display.md` an
 | [`components/controllers/`](../components/controllers/) | controller half of `vendor.oculus.hardware.sensors@1.0` | input done, 6DoF pose location open | [controllers.md](controllers.md) |
 | [`components/tracking/`](../components/tracking/) | `oculus.internal.tracking.ITrackingService` | core done, motion-to-photon latency open | [tracking.md](tracking.md) |
 | [`components/kernel/`](../components/kernel/) | stock `boot_a` kernel | instrumented build working | [kernel.md](kernel.md) |
-| [`components/os/`](../components/os/) | the stock OS itself (step 5, the OS swap) | first successful build (`boot.img`/`system.img`), not yet flashed to the device | [os.md](os.md) |
+| [`components/os/`](../components/os/) | the stock OS itself (step 5, the OS swap) | builds real images, first boot attempt failed early, cause undiagnosed | [os.md](os.md) |
 | *(not yet a component)* | display/compositor | characterisation done, no replacement binary yet | [compositor.md](compositor.md) |
 
 `tools/` holds everything that isn't a shipped replacement binary: diagnostic/reverse-engineering
