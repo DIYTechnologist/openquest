@@ -126,3 +126,10 @@ components/os/device-monterey-17/prebuilt/
 exports/calibration-2026-08-30/calibration/
 exports/calibration-2026-08-30/openvr_calib_out/
 exports/display-6a-2026-09-05/distortion-mesh.bin
+
+# ─── Raw camera captures (show the room/user, not just abstract data -- same sensitivity class) ───
+exports/cam-direct-2026-09-01/*.png
+exports/camera-2026-08-31/*.png
+exports/camera-ident-2026-09-05/*.png
+exports/camsnap-2026-09-03/png/*.png
+exports/ib-capture-2026-09-01/*.png
