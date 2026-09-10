@@ -1,0 +1,21 @@
+# fstab.monterey — adapted from the motorola/nokia msm8998-common reference fstabs, cut down to
+# monterey's actual partition table (research-notes/65's `fastboot getvar all` capture) and Phase 2's
+# "boot to a shell" scope. UNTESTED, see lineage_monterey.mk's header.
+#
+# No `vendor` line: unlike the reference devices, monterey has no separate vendor partition
+# (research-notes/16/65) -- TARGET_COPY_OUT_VENDOR is system/vendor in BoardConfig.mk, so vendor
+# content lives inside system.img and needs no mount entry of its own.
+# No modem/bluetooth/dsp/fsg mounts: those partitions exist in the table but this project has never
+# established monterey actually uses cellular/DSP firmware from them (research-notes/65 flagged
+# modem_a/modem_b as possibly just pin-compatible board legacy) -- not touching them until that's
+# understood, consistent with Phase 2 explicitly not attempting hardware bring-up yet.
+
+# No avb= flag: BOARD_AVB_ENABLE is false in BoardConfig.mk, matching both the reference devices'
+# own choice and this device's actual VB1/no-vbmeta state (research-notes/32/65) -- an avb flag
+# here with AVB disabled in BoardConfig would be a real inconsistency, not just an omission.
+#<src>                                   <mnt_point>   <type> <mnt_flags and options>                                        <fs_mgr_flags>
+/dev/block/bootdevice/by-name/system_a   /             ext4   ro,barrier=1,discard                                           wait,slotselect,first_stage_mount
+/dev/block/bootdevice/by-name/userdata   /data         ext4   noatime,nosuid,nodev,barrier=1,noauto_da_alloc,discard,lazytime,errors=panic   wait,check,latemount,formattable,quota,reservedsize=128M
+/dev/block/bootdevice/by-name/misc       /misc         emmc   defaults                                                       defaults
+/dev/block/bootdevice/by-name/persist    /mnt/vendor/persist   ext4   noatime,nosuid,nodev,barrier=1                          wait
+/dev/block/zram0                         none          swap   defaults                                                       zramsize=25%

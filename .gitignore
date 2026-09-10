@@ -112,7 +112,17 @@ tools/cam_kernel/.kinc/
 tools/controller_tracking/controller_pose_log
 tools/controller_tracking/remote_pose_probe
 tools/motion_to_photon/fb_probe
+tools/cam_direct/cam_direct
+tools/cam_kernel/libioctl_trace.so
+tools/pose_log/pose_log
+tools/sb_survey/sb_survey
 
 # copied in by components/os's kernel-prebuilt target from components/kernel's own build output.
 components/os/device-monterey/prebuilt/
 components/os/device-monterey-18/prebuilt/
+components/os/device-monterey-17/prebuilt/
+
+# ─── Per-unit calibration & serial-bearing data (same sensitivity class as /backups/ above) ───
+exports/calibration-2026-08-30/calibration/
+exports/calibration-2026-08-30/openvr_calib_out/
+exports/display-6a-2026-09-05/distortion-mesh.bin

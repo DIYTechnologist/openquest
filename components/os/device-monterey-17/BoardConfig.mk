@@ -1,16 +1,17 @@
-# BoardConfig.mk -- lineage-18.1 (Android 11) bring-up reference build. UNTESTED first draft.
-# Adapted from components/os/device-monterey/BoardConfig.mk (the lineage-21 tree), with the one
-# change that's the entire point of this build (research-notes/74):
+# BoardConfig.mk -- lineage-17.1 (Android 10) bring-up reference build. UNTESTED first draft.
+# Adapted from components/os/device-monterey-18/BoardConfig.mk, itself adapted from
+# components/os/device-monterey/BoardConfig.mk (the lineage-21 tree).
 
-# CORRECTED, research-notes/78: BOARD_BUILD_SYSTEM_ROOT_IMAGE := true is the OPPOSITE of what
-# research-notes/74 assumed. Confirmed by reading build/make/core/main.mk directly: setting it true
-# is what SUPPRESSES the classic full ramdisk target (INSTALLED_RAMDISK_TARGET et al, gated behind
-# `ifneq ($(BOARD_BUILD_SYSTEM_ROOT_IMAGE),true)`) -- true means system-as-root, i.e. a nearly-empty
-# ramdisk (confirmed empirically: root/ staging dir held only default.prop+fstab, packed ramdisk was
-# a literal 0 bytes) with the real root content living in system.img instead. The stock ramdisk's
-# monolithic, self-contained-root shape (init.rc/sepolicy/fstab embedded directly, research-notes/74)
-# is what you get with this flag FALSE/unset -- the classic pre-SAR ramdisk-is-root scheme. Leaving
-# it unset entirely (the default) rather than writing `:= false` for clarity.
+# BOARD_BUILD_SYSTEM_ROOT_IMAGE deliberately left UNSET here, matching the lineage-18.1 tree's
+# working config (research-notes/78) -- true means system-as-root there (a near-empty ramdisk,
+# opposite of research-notes/74's original assumption). BUT research-notes/78 also found that even
+# with this unset, lineage-18.1 (Android 11) still produces only a two-stage-init first-stage
+# ramdisk (bare `init` binary + mountpoints, no init.rc/sepolicy/symlinks) -- AOSP's own Makefile
+# there calls that shape "the first stage ramdisk" unconditionally. WHETHER lineage-17.1 (Android
+# 10, one branch further back) can still produce the stock device's real single-stage/monolithic
+# shape at all is the entire open question this build exists to answer -- check the actual built
+# ramdisk's content directly (unpack_bootimg, look for a real init.rc at ramdisk root) once this
+# builds, don't assume unset is sufficient just because it was the right call on lineage-18.1.
 
 TARGET_BOARD_PLATFORM := msm8998
 TARGET_BOOTLOADER_BOARD_NAME := monterey

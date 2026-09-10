@@ -16,6 +16,20 @@ BUILD_ENV := HOME=$(LINEAGEOS_DIR)/.home \
              GIT_AUTHOR_NAME="Quest OS Build" GIT_AUTHOR_EMAIL="quest-build@localhost" \
              GIT_COMMITTER_NAME="Quest OS Build" GIT_COMMITTER_EMAIL="quest-build@localhost"
 
+# Defined at top level (not inside the IN_CONTAINER block below) because lfs-pull-18's recipe
+# expands $(LFS_DIRS) on the HOST when it builds the podman command line -- found the hard way:
+# lfs-pull-18 ran with an empty $(LFS_DIRS) (silently a no-op, `for d in ; do`) because it used to
+# only exist inside the ifeq($(IN_CONTAINER),1) guard, which is never true on the host side.
+LFS_DIRS := external/chromium-webview/prebuilt/arm external/chromium-webview/prebuilt/arm64 \
+            external/chromium-webview/prebuilt/x86 external/chromium-webview/prebuilt/x86_64
+
+# Same top-level-visibility reasoning as LFS_DIRS just above: lunch-18's recipe (host-side, not
+# IN_CONTAINER) needs this too. Found by the same bug class -- lunch-18 silently ran `-j` with no
+# number since BUILD_JOBS used to only be defined inside the ifeq($(IN_CONTAINER),1) block below,
+# which is never true on the host. In practice the build settled at ~nproc concurrency anyway
+# (Android's build tooling appears to self-cap), not a runaway, but don't rely on that.
+BUILD_JOBS ?= 8
+
 ifeq ($(IN_CONTAINER),1)
 .PHONY: init sync lfs-pull device-tree-link kernel-prebuilt lunch
 
@@ -37,8 +51,7 @@ sync:
 # 134-byte pointer files ("version https://git-lfs.github.com/spec/v1 ...", no error anywhere) and
 # only failed much later when something tried to treat the pointer text as real zip/APK content.
 # Explicit `git lfs pull` per project is the reliable way to force the actual objects down.
-LFS_DIRS := external/chromium-webview/prebuilt/arm external/chromium-webview/prebuilt/arm64 \
-            external/chromium-webview/prebuilt/x86 external/chromium-webview/prebuilt/x86_64
+# (LFS_DIRS itself is defined at top level, above -- see comment there.)
 lfs-pull:
 	cd $(LINEAGEOS_DIR) && for d in $(LFS_DIRS); do (cd "$$d" && git lfs pull); done
 
@@ -79,7 +92,7 @@ kernel-prebuilt:
 # several of ninja's concurrent build actions here are JVM processes, kotlinc/R8/javac, that can
 # each spike a few GB, so -j16 means up to 16 of those concurrently). Override on the command line
 # (`make -C components/os lunch BUILD_JOBS=N`) if running on a host with more headroom.
-BUILD_JOBS ?= 8
+# (BUILD_JOBS itself is defined at top level, above -- see comment there.)
 lunch: kernel-prebuilt device-tree-link
 	cd $(LINEAGEOS_DIR) && $(BUILD_ENV) bash -c \
 	  'source build/envsetup.sh && lunch lineage_monterey-ap2a-userdebug && make bootimage systemimage -j$(BUILD_JOBS)'
@@ -130,3 +143,51 @@ kernel-prebuilt-18:
 lunch-18: kernel-prebuilt-18 device-tree-link-18
 	$(CONTAINER18) bash -c \
 	  '$(BUILD_ENV18) bash -c "source build/envsetup.sh && lunch lineage_monterey-userdebug && make bootimage systemimage -j$(BUILD_JOBS)"'
+
+# --- lineage-17.1 (Android 10) bring-up reference build, research-notes/78 --------------------
+#
+# research-notes/78 found lineage-18.1 (Android 11) already has two-stage init baked in
+# unconditionally regardless of BOARD_BUILD_SYSTEM_ROOT_IMAGE -- AOSP's own Makefile calls the
+# non-SAR ramdisk "the first stage ramdisk" by that version, so it can't produce the stock device's
+# real single-stage/monolithic ramdisk shape (research-notes/74) at all. The stock device is
+# confirmed running Android 10 (research-notes/03/17: `ro.build.version.incremental`, kernel
+# 4.4.205), not 8/9 as research-notes/74 guessed -- lineage-17.1 is the matching branch, and old
+# enough that two-stage init wasn't yet unconditional. Reuses the SAME container image as the -18
+# targets (Ubuntu 20.04 + OpenJDK 11 already proved sufficient for a newer AOSP branch than either
+# officially documents needing, so try it as-is here too rather than pre-emptively building a third
+# container) -- just a separate work tree/device tree so the three trees never interfere.
+LINEAGEOS17_DIR := $(REPO_ROOT)/work/lineageos17
+CONTAINER17 := podman run --rm -v $(REPO_ROOT):$(REPO_ROOT):Z -w $(LINEAGEOS17_DIR) quest-lineageos18-build
+BUILD_ENV17 := HOME=$(LINEAGEOS17_DIR)/.home \
+               GIT_AUTHOR_NAME="Quest OS Build" GIT_AUTHOR_EMAIL="quest-build@localhost" \
+               GIT_COMMITTER_NAME="Quest OS Build" GIT_COMMITTER_EMAIL="quest-build@localhost"
+
+.PHONY: init-17 sync-17 lfs-pull-17 device-tree-link-17 kernel-prebuilt-17 lunch-17
+
+init-17:
+	mkdir -p $(LINEAGEOS17_DIR) $(LINEAGEOS17_DIR)/.home
+	$(CONTAINER17) bash -c '$(BUILD_ENV17) repo init -u https://github.com/LineageOS/android.git -b lineage-17.1'
+
+sync-17:
+	$(CONTAINER17) bash -c '$(BUILD_ENV17) repo sync -c -j4 --no-clone-bundle --force-sync'
+	$(MAKE) lfs-pull-17
+
+lfs-pull-17:
+	$(CONTAINER17) bash -c 'for d in $(LFS_DIRS); do (cd "$$d" && git lfs pull) || true; done'
+
+device-tree-link-17:
+	mkdir -p $(LINEAGEOS17_DIR)/device/oculus
+	rm -rf $(LINEAGEOS17_DIR)/device/oculus/monterey
+	cp -rs $(REPO_ROOT)/components/os/device-monterey-17 $(LINEAGEOS17_DIR)/device/oculus/monterey
+
+# Same patched kernel as the other two trees -- one source of truth, own prebuilt/ dir so no two
+# trees' device-tree-link targets race or overwrite each other.
+kernel-prebuilt-17:
+	mkdir -p $(REPO_ROOT)/components/os/device-monterey-17/prebuilt
+	python3 $(REPO_ROOT)/components/os/patch_legacysar_kernel.py \
+	   $(REPO_ROOT)/components/kernel/build/out/arch/arm64/boot/Image.gz-dtb \
+	   $(REPO_ROOT)/components/os/device-monterey-17/prebuilt/Image.gz-dtb
+
+lunch-17: kernel-prebuilt-17 device-tree-link-17
+	$(CONTAINER17) bash -c \
+	  '$(BUILD_ENV17) bash -c "source build/envsetup.sh && lunch lineage_monterey-userdebug && make bootimage systemimage -j$(BUILD_JOBS)"'
