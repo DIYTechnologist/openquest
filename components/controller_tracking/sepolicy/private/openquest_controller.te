@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+# System-ext process; no camera, SyncBoss, ptrace, Meta Binder or permissive access.
+type openquest_controller, domain;
+typeattribute openquest_controller coredomain;
+type openquest_controller_exec, exec_type, system_file_type, file_type;
+init_daemon_domain(openquest_controller)
+
+type openquest_tracking_data_file, file_type, data_file_type, core_data_file_type;
+type openquest_controller_socket, file_type;
+allow openquest_controller openquest_tracking_data_file:dir r_dir_perms;
+allow openquest_controller openquest_tracking_data_file:file r_file_perms;
+allow openquest_controller self:unix_stream_socket create_stream_socket_perms;
+
+# The privileged system-side camera/runtime bridge is the intended producer.
+allow system_server openquest_controller_socket:sock_file write;
+allow system_server openquest_controller:unix_stream_socket connectto;
+
+system_internal_prop(openquest_controller_prop)
+set_prop(system_server, openquest_controller_prop)
+userdebug_or_eng(`set_prop(shell, openquest_controller_prop)')

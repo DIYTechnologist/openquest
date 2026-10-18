@@ -1,0 +1,55 @@
+// Build the reproducible NDK prebuilts with ./build-android.sh before Soong.
+soong_namespace {}
+
+cc_prebuilt_library_shared {
+    name: "libopenquest_ndk_cxx",
+    stem: "libc++_shared",
+    system_ext_specific: true,
+    compile_multilib: "64",
+    srcs: ["prebuilts/arm64/libc++_shared.so"],
+    stl: "none",
+    shared_libs: ["libc", "libdl", "libm"],
+    strip: { none: true },
+    notice: "prebuilts/NOTICE",
+}
+
+cc_prebuilt_library_shared {
+    name: "libopenquest_opencv",
+    stem: "libopencv_java4",
+    system_ext_specific: true,
+    compile_multilib: "64",
+    srcs: ["prebuilts/arm64/libopencv_java4.so"],
+    stl: "none",
+    shared_libs: ["libc", "libdl", "libm", "liblog", "libz", "libjnigraphics", "libmediandk", "libopenquest_ndk_cxx"],
+    strip: { none: true },
+    notice: "prebuilts/NOTICE",
+}
+
+cc_defaults {
+    name: "openquest_controller_binary_defaults",
+    system_ext_specific: true,
+    compile_multilib: "64",
+    stl: "none",
+    shared_libs: ["libc", "libdl", "libm", "libopenquest_opencv", "libopenquest_ndk_cxx"],
+    strip: { none: true },
+}
+
+cc_prebuilt_binary {
+    name: "oq-controller-service",
+    defaults: ["openquest_controller_binary_defaults"],
+    srcs: ["prebuilts/arm64/oq-controller-service"],
+    init_rc: ["lineage/openquest-controller.rc"],
+}
+
+cc_prebuilt_binary {
+    name: "oq-controller-replay",
+    defaults: ["openquest_controller_binary_defaults"],
+    srcs: ["prebuilts/arm64/oq-controller-replay"],
+}
+
+// Experimental stdin camera/SyncBoss bridge. This has no automatic hardware owner.
+cc_prebuilt_binary {
+    name: "oq-controller-live",
+    defaults: ["openquest_controller_binary_defaults"],
+    srcs: ["prebuilts/arm64/oq-controller-live"],
+}

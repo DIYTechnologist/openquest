@@ -44,6 +44,8 @@
 #include <media/msmb_isp.h>
 #include <media/msmb_ispif.h>
 #include <media/msm_cam_sensor.h>
+#include <stdatomic.h>
+#include "syncboss_framer.h"
 
 #define MAXCAM 4
 #define W 640
@@ -124,12 +126,45 @@ static struct imusample g_iq[IQ_CAP];
 static volatile unsigned g_iq_head = 0, g_iq_tail = 0;   // single producer, single consumer
 static pthread_mutex_t g_iq_lock = PTHREAD_MUTEX_INITIALIZER;
 static const char *g_outdir = "/data/local/tmp/camkernel";
+// Optional controller mode preserves complete sensor payloads and only short
+// camera exposures. Legacy C/I/E stream output is unchanged when disabled.
+static int g_controller_stream = 0;
+#define PACKET_CAP 4096
+struct raw_packet { uint64_t host_ns; uint8_t type, length, payload[255]; };
+static struct raw_packet g_packets[PACKET_CAP];
+static _Atomic unsigned g_packet_head, g_packet_tail, g_packet_dropped;
+static unsigned long long g_packet_types[256];
+static void on_sensor_packet(void *context,uint8_t type,const uint8_t *payload,uint8_t length) {
+  uint64_t host_ns=*(uint64_t*)context;
+  g_packet_types[type]++;
+  if(g_controller_stream) {
+    if(type!=0x50 && type!=0x8f && type!=0xe0) return;
+    unsigned h=atomic_load_explicit(&g_packet_head,memory_order_relaxed),next=(h+1)%PACKET_CAP;
+    if(next==atomic_load_explicit(&g_packet_tail,memory_order_acquire)){atomic_fetch_add(&g_packet_dropped,1);return;}
+    g_packets[h].host_ns=host_ns;g_packets[h].type=type;g_packets[h].length=length;
+    memcpy(g_packets[h].payload,payload,length);
+    atomic_store_explicit(&g_packet_head,next,memory_order_release);
+    return;
+  }
+  if(type==0xe0 && length==14) {
+    uint32_t us;memcpy(&us,payload+1,4);unsigned h=g_eq_head,nx=(h+1)%EQ_CAP;
+    if(nx!=g_eq_tail){g_eq[h].dev_ns=(uint64_t)us*1000;g_eq[h].host_ns=host_ns;__sync_synchronize();g_eq_head=nx;}
+  }
+  if(type==0x50 && length==36) {
+    uint32_t us;float v[7];memcpy(&us,payload,4);memcpy(v,payload+8,28);unsigned h=g_iq_head,nx=(h+1)%IQ_CAP;
+    if(nx!=g_iq_tail){g_iq[h].dev_ns=(uint64_t)us*1000;g_iq[h].host_ns=host_ns;
+      for(int i=0;i<3;i++){g_iq[h].a[i]=v[i];g_iq[h].g[i]=v[i+3];}
+      __sync_synchronize();g_iq_head=nx;
+    }
+  }
+}
 static void *imu_thread(void *arg) {
   int out = *(int *)arg;
   char p[256]; snprintf(p, sizeof p, "%s/syncboss_chunks.csv", g_outdir);
   FILE *idx = fopen(p, "w");
   if (idx) fprintf(idx, "#host_mono_ns,byte_offset,bytes\n");
   unsigned char buf[65536];
+  struct oq_sb_framer framer={0};
   unsigned long long off = 0;
   // poll() not a blocking read(), so the thread observes g_imu_run and can be joined
   // deterministically -- otherwise the tail of syncboss.raw is lost at exit.
@@ -140,44 +175,7 @@ static void *imu_thread(void *arg) {
     if (n > 0) {
       struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
       uint64_t host_ns = (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec;
-      if (g_stream) {
-        // Framing 01 03 00 <type> 00 <len>; type 0x50 len 36 is IMU:
-        //   u32 ts_us, u32 id, f32 accel[3] (g), f32 gyro[3] (deg/s), f32 temp
-        for (ssize_t i = 0; i + 6 <= n; ) {
-          if (!(buf[i] == 1 && buf[i+1] == 3 && buf[i+2] == 0 && buf[i+4] == 0)) { i++; continue; }
-          unsigned char t = buf[i+3], L = buf[i+5];
-          if (i + 6 + L > n) break;
-          if (t == 0xe0 && L == 14) {
-            // Camera exposure stamp, on the SAME nRF clock as the IMU. The u32 is at payload
-            // offset 1, not 0: reading it at 0 yields 8533 ms deltas (the low byte is a tag),
-            // at 1 it yields exactly 33333 us = 30 Hz. This is what removes the camera/IMU
-            // cross-clock problem -- V4L2 stamps are on CLOCK_MONOTONIC and sit ~816 ms away.
-            uint32_t eus; memcpy(&eus, buf + i + 6 + 1, 4);
-            unsigned h = g_eq_head, nx = (h + 1) % EQ_CAP;
-            if (nx != g_eq_tail) {
-              g_eq[h].dev_ns = (uint64_t)eus * 1000ull;
-              g_eq[h].host_ns = host_ns;
-              __sync_synchronize();
-              g_eq_head = nx;
-            }
-          }
-          if (t == 0x50 && L == 36) {
-            const unsigned char *pl = buf + i + 6;
-            uint32_t us; memcpy(&us, pl, 4);
-            float v[7]; memcpy(v, pl + 8, 28);
-            unsigned h = g_iq_head, nx = (h + 1) % IQ_CAP;
-            if (nx != g_iq_tail) {   // drop rather than block the SPI reader
-              g_iq[h].dev_ns = (uint64_t)us * 1000ull;
-              g_iq[h].host_ns = host_ns;
-              g_iq[h].a[0]=v[0]; g_iq[h].a[1]=v[1]; g_iq[h].a[2]=v[2];
-              g_iq[h].g[0]=v[3]; g_iq[h].g[1]=v[4]; g_iq[h].g[2]=v[5];
-              __sync_synchronize();
-              g_iq_head = nx;
-            }
-          }
-          i += 6 + L;
-        }
-      }
+      if(g_stream) oq_sb_feed(&framer,buf,(size_t)n,on_sensor_packet,&host_ns);
       if (out >= 0 && write(out, buf, (size_t)n) != n) break;
       if (idx) fprintf(idx, "%llu,%llu,%zd\n",
                        (unsigned long long)ts.tv_sec * 1000000000ull + ts.tv_nsec, off, n);
@@ -211,11 +209,22 @@ static int mcu_open_and_power(void) {
   printf("[%c] open %s -> fd %d\n", sb_fd < 0 ? '-' : '+', SB_DEV, sb_fd);
   if (sb_fd < 0) { perror("open " SB_DEV); return -1; }
   unsigned char none = 0;
-  return sb_send("camera_probe(power on)", 0x28, 0, &none, 0);
+  int rc=sb_send("camera_probe(power on)", 0x28, 0, &none, 0);
+  if(g_controller_stream){
+    usleep(200000);
+    // Input start is property 0xd5 inside request 0x03, not request 0xd5.
+    rc|=sb_prop("input_start",0xd5,&none,1);
+    // The stock input manager separately enters normal radio mode (request 0x85).
+    rc|=sb_send("input_radio_start",0x85,sb_seq++,NULL,0);
+    usleep(200000);
+  }
+  return rc;
 }
 static int mcu_configure(int ncam, uint16_t exposure, uint16_t gain) {
   unsigned char n8 = (unsigned char)ncam, bpp = 8, tag = 1;
   uint32_t period = 33333;
+  const char *period_env=getenv("CAMKERNEL_PERIOD_US");
+  if(period_env){char *end;unsigned long value=strtoul(period_env,&end,10);if(*end||value<10000||value>100000)return -1;period=(uint32_t)value;}
   int rc = 0;
   rc |= sb_prop("set_bpp(8)", 0x8c, &bpp, 1);
   rc |= sb_send("camera_init", 0x2e, 0, &n8, 1);
@@ -229,6 +238,7 @@ static int mcu_configure(int ncam, uint16_t exposure, uint16_t gain) {
   // tools/sb_survey). libsyncboss's syncboss_imu_enable is message type 110; this is that packet
   // without the blob.
   rc |= sb_send("imu_enable", 0x6e, sb_seq++, &n8, 1);
+
   return rc;
 }
 static int mcu_start(int ncam) {
@@ -726,6 +736,7 @@ static double save_thresh(void) {
 
 int main(int argc, char **argv) {
   double thresh = save_thresh();
+  g_controller_stream=getenv("CAMKERNEL_CONTROLLER_STREAM")&&strcmp(getenv("CAMKERNEL_CONTROLLER_STREAM"),"0");
   int ncam = argc > 1 ? atoi(argv[1]) : 1;
   int secs = argc > 2 ? atoi(argv[2]) : 3;
   uint16_t exposure = argc > 3 ? (uint16_t)atoi(argv[3]) : 3000;
@@ -742,7 +753,7 @@ int main(int argc, char **argv) {
     if (sfd < 0) { perror("dup stdout"); return 1; }
     g_sout = fdopen(sfd, "wb");
     if (!g_sout) { perror("fdopen stream"); return 1; }
-    setvbuf(g_sout, NULL, _IOFBF, 1 << 20);
+    setvbuf(g_sout, NULL, _IOFBF, g_controller_stream ? 65536 : 1 << 20);
     dup2(STDERR_FILENO, STDOUT_FILENO);   // every printf in this file now goes to stderr
   }
   int save_mask = 0;
@@ -874,7 +885,16 @@ int main(int argc, char **argv) {
   int got[MAXCAM] = {0}, saved[MAXCAM] = {0};
   double t_end = now_s() + secs;
   while (now_s() < t_end) {
-    if (g_stream) {   // drain IMU first so samples precede the frame they belong to
+    if (g_stream && g_controller_stream) {
+      unsigned t=atomic_load_explicit(&g_packet_tail,memory_order_relaxed);
+      unsigned stop=atomic_load_explicit(&g_packet_head,memory_order_acquire);
+      while(t!=stop){
+        struct raw_packet *packet=&g_packets[t];
+        if(emit('S',packet->type,0,0,0,packet->host_ns,packet->payload,packet->length)<0){g_imu_run=0;break;}
+        t=(t+1)%PACKET_CAP;atomic_store_explicit(&g_packet_tail,t,memory_order_release);
+      }
+    }
+    if (g_stream && !g_controller_stream) {   // drain legacy IMU first
       while (g_eq_tail != g_eq_head) {
         struct expsample *e = &g_eq[g_eq_tail];
         emit('E', 0, 0, 0, e->dev_ns, e->host_ns, NULL, 0);
@@ -901,11 +921,18 @@ int main(int argc, char **argv) {
         const unsigned char *px = cams[i].buf[vb.index].va;
         unsigned long sum = 0; int nsamp = 0;
         for (int k = W * 1; k < W * (1 + 480); k += 64) { sum += px[k]; nsamp++; }
-        if (nsamp && (double)sum / nsamp >= thresh) {          // SLAM (long-exposure) frames only
+        unsigned lines=((unsigned)px[6]<<8)|px[7];
+        int short_exposure=lines>0&&lines<=4&&px[3]==px[4]&&px[4]==px[5];
+        struct timespec delivery;clock_gettime(CLOCK_MONOTONIC,&delivery);
+        uint64_t delivery_ns=(uint64_t)delivery.tv_sec*1000000000ull+delivery.tv_nsec;
+        uint64_t completion_ns=(uint64_t)vb.timestamp.tv_sec*1000000000ull+(uint64_t)vb.timestamp.tv_usec*1000ull;
+        int fresh=delivery_ns>=completion_ns && delivery_ns-completion_ns<50000000;
+        if ((g_controller_stream && short_exposure && fresh) || (!g_controller_stream && nsamp && (double)sum / nsamp >= thresh)) {
           struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
-          emit('C', (uint8_t)i, W, H, (uint64_t)vb.timestamp.tv_sec * 1000000000ull +
+          emit(g_controller_stream?'R':'C', (uint8_t)i, W, H, (uint64_t)vb.timestamp.tv_sec * 1000000000ull +
                (uint64_t)vb.timestamp.tv_usec * 1000ull,
                (uint64_t)ts.tv_sec * 1000000000ull + ts.tv_nsec, px, FRAME_SZ);
+          if(g_controller_stream)fflush(g_sout);
           saved[i]++;
         }
       } else if (dataset && (save_mask & (1 << i)) && vb.index < NBUF) {
@@ -956,9 +983,11 @@ int main(int argc, char **argv) {
     }
     usleep(2000);
   }
+  if(g_controller_stream)fprintf(stderr,"controller_packet_drops=%u\n",atomic_load(&g_packet_dropped));
   if (g_sout) { fflush(g_sout); }
   if (tsf) fclose(tsf);
   if (imu_started) { g_imu_run = 0; pthread_join(imu_th, NULL); }
+  if(g_controller_stream) for(int t=0;t<256;t++) if(g_packet_types[t]) fprintf(stderr,"sensor_type=0x%02x packets=%llu\n",t,g_packet_types[t]);
   if (rawfd >= 0) close(rawfd);
   if (fidx) { fflush(fidx); fclose(fidx); }
   if (dataset) {

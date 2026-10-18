@@ -1,0 +1,1 @@
+persist.openquest.controller.enabled u:object_r:openquest_controller_prop:s0 exact bool

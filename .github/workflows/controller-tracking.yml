@@ -1,0 +1,27 @@
+name: Controller tracking
+on:
+  pull_request:
+    paths: ['components/camera/src/**', 'components/camera/build-android.sh', 'components/controller_tracking/**', 'tools/controller_tracking/**', 'tests/test_controller_pose*', '.github/workflows/controller-tracking.yml']
+  push:
+    paths: ['components/camera/src/**', 'components/camera/build-android.sh', 'components/controller_tracking/**', 'tools/controller_tracking/**', 'tests/test_controller_pose*', '.github/workflows/controller-tracking.yml']
+permissions:
+  contents: read
+jobs:
+  native-and-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build libopencv-dev
+      - name: Build native tracker
+        run: cmake -S components/controller_tracking -B /tmp/oq-controller-build -G Ninja && cmake --build /tmp/oq-controller-build -j2
+      - name: Native geometry and privileged socket tests
+        run: sudo ctest --test-dir /tmp/oq-controller-build --output-on-failure
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python replay dependencies
+        run: python -m pip install numpy==2.2.6 opencv-python-headless==4.12.0.88
+      - name: Synthetic replay tests
+        run: python -m unittest discover -s tests -p 'test_controller_pose*.py'

@@ -2,16 +2,10 @@
 """bootstrap_model.py — build an initial LED constellation model by stereo-triangulating one
 controller-tracking-exposure frame instant.
 
-No LED 3D geometry exists anywhere for this project and none is extractable (research-notes/01
-flags libtrackingengines.so as a deliberate dead end) -- research-notes/55's plan is to bootstrap a
-model ourselves from stereo triangulation instead of looking one up. This is that step: pick the
-frame instant (from a tools/cam_tap capture, e.g. exports/controller-constellation-2026-09-07/cap9)
-with the richest simultaneous two-camera blob view, stereo-match blobs by epipolar consistency
-(everything reused from tools/vio/rectify_pair.py's and epipolar_check.py's KB4 math -- not
-reimplemented), and triangulate. The resulting 3D point set, expressed in the IMU frame AT THAT
-INSTANT, becomes the canonical model -- there is no independent "controller body frame" to anchor
-to, so this instant's observed geometry defines one by convention, same as any first calibration
-frame would.
+This historical geometric bootstrap predates the factory calibration importer. For a real
+Quest controller, prefer factory_controller_model.py: it imports the complete per-controller
+LED positions and normals. The bootstrap remains useful for calibration-free experiments,
+but its inferred axes do not define the physical controller IMU frame.
 
 Usage: bootstrap_model.py <cap_dir> <basalt_calibration.json> <camA> <camB> <out_model.json>
                           [--expo-us 38] [--max-lag-ns 100000]

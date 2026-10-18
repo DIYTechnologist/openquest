@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: MIT
+on post-fs-data
+    mkdir /data/misc/openquest 0770 system system
+    restorecon_recursive /data/misc/openquest
+
+# A camera/runtime producer supplies synchronized images/bearings and calibrated
+# body gyros over the versioned socket. This service does not own the cameras.
+service openquest-controller /system_ext/bin/oq-controller-service /data/misc/openquest/cameras.json /data/misc/openquest/controller-right.json /data/misc/openquest/gyro.json /dev/socket/openquest_controller
+    class late_start
+    user system
+    group system
+    socket openquest_controller stream 0660 system system
+    disabled
+    restart_period 5
+
+on property:persist.openquest.controller.enabled=1
+    start openquest-controller
+
+on property:persist.openquest.controller.enabled=0
+    stop openquest-controller

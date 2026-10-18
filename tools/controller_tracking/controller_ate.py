@@ -31,6 +31,7 @@ import numpy as np
 
 sys.path.insert(0, __file__.rsplit('/', 1)[0] + '/../vio')
 from ate import umeyama
+from pose_geometry import rotate_reference_offset
 
 
 def load_frame_clock_map(cap_dir):
@@ -42,21 +43,27 @@ def load_frame_clock_map(cap_dir):
     return m
 
 
-def load_pnp_poses(path, cts_to_mono):
+def load_pnp_poses(path, cts_to_mono, reference_offset=None):
     # pnp_track.py columns: ts_ns,n_blobs,n_used,reproj_err,method,px,py,pz,qx,qy,qz,qw
     rows = []
-    for line in open(path):
-        if line.startswith('#'):
-            continue
-        p = line.strip().split(',')
-        if len(p) < 6 or p[5] == '':  # unsolved frame
-            continue
-        cts = int(p[0])
-        if cts not in cts_to_mono:
-            continue
-        rows.append((cts_to_mono[cts], float(p[5]), float(p[6]), float(p[7])))
+    with open(path) as source:
+        for line in source:
+            if line.startswith('#'):
+                continue
+            p = line.strip().split(',')
+            if len(p) < 6 or p[5] == '':  # unsolved frame
+                continue
+            cts = int(p[0])
+            if cts not in cts_to_mono:
+                continue
+            position = np.array([float(p[5]), float(p[6]), float(p[7])])
+            if reference_offset is not None:
+                if len(p) < 12:
+                    raise ValueError('Reference offset correction requires pose quaternions')
+                position += rotate_reference_offset([float(x) for x in p[8:12]], reference_offset)
+            rows.append((cts_to_mono[cts], *position))
     rows.sort()
-    return np.array(rows)  # columns: mono_ns, x, y, z
+    return np.array(rows).reshape(-1, 4)  # columns: mono_ns, x, y, z
 
 
 def load_ground_truth(path):
@@ -95,10 +102,24 @@ def main():
     ap.add_argument('controller_poses')
     ap.add_argument('--max-speed', type=float, default=3.0, help='m/s, hand-motion plausibility bound')
     ap.add_argument('--max-dt', type=float, default=0.05)
+    ap.add_argument('--reference-offset-model', type=float, nargs=3,
+                    help='independently calibrated vector from reported model origin to reference controller IMU, in model axes')
     args = ap.parse_args()
+    reference = None
+    with open(args.pnp_poses) as source:
+        for line in source:
+            if line.startswith('#pose_reference='):
+                reference = line.split('=', 1)[1].split(';', 1)[0].strip()
+                break
+    if reference == 'centroid' and args.reference_offset_model is None:
+        ap.error('LED-centroid and controller-IMU positions are different physical points. '
+                 'Supply an independently calibrated --reference-offset-model X Y Z before comparing them.')
+    if reference is None or reference == 'legacy':
+        print('WARNING: historical capture-IMU model origin is not a calibrated controller-IMU origin; '
+              'uncompensated reference-point motion can bias position/scale statistics.')
 
     cts_to_mono = load_frame_clock_map(args.cap_dir)
-    est_raw = load_pnp_poses(args.pnp_poses, cts_to_mono)
+    est_raw = load_pnp_poses(args.pnp_poses, cts_to_mono, args.reference_offset_model)
     gt = load_ground_truth(args.controller_poses)
     print(f"pnp poses (pre-filter): {len(est_raw)}   ground truth samples: {len(gt)}")
 

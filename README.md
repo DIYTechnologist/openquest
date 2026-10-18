@@ -52,3 +52,10 @@ tooling under `tools/` still needs, documented at the top of each of those direc
 
 Owner-authorized work on one owned Quest 1. No third-party systems, accounts, or content
 protection are in scope. Reversible throughout (stock `boot_a` preserved in `backups/`).
+
+## Experimental native controller tracking
+
+The new [native controller tracking component](components/controller_tracking/README.md)
+provides an Android arm64 tracker, local pose/sensor IPC and opt-in LineageOS packaging.
+It is tested on recorded motion and synthetic socket inputs, not a complete live VR integration.
+Camera/SyncBoss production, an OpenXR consumer and target-ROM boot validation remain open.

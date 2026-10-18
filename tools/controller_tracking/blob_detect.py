@@ -44,8 +44,24 @@ def find_blobs(img, thresh=DEFAULT_THRESH, min_area=MIN_AREA, max_area=MAX_AREA)
         yy, xx = np.mgrid[y0:y0+h, x0:x0+w]
         u = (wgt * xx).sum() / total
         v = (wgt * yy).sum() / total
-        out.append([u, v, float(area), float(patch.max())])
+        out.append([u, v, float(area), float(patch[lbl_patch == i].max())])
     return np.array(out) if out else np.zeros((0, 4))
+
+
+def find_led_blobs(img, thresh=DEFAULT_THRESH, split_threshold=128,
+                   min_area=MIN_AREA, max_area=MAX_AREA):
+    """Split bright cores while retaining separate dim emitters.
+
+    A low-threshold component can merge neighboring saturated LEDs. Use its
+    high-threshold cores instead; retain low components only when their actual
+    peak is below the split threshold. Never emit both levels for one component.
+    """
+    if split_threshold <= thresh:
+        raise ValueError('Split threshold must exceed detection threshold')
+    low=find_blobs(img,thresh,min_area,max_area)
+    high=find_blobs(img,split_threshold,min_area,max_area)
+    dim=low[low[:,3]<=split_threshold]
+    return np.concatenate([dim,high],axis=0)
 
 
 def find_static_positions(frame_reader, frame_rows, sample_n=15, tol=3.0, min_frac=0.7,
